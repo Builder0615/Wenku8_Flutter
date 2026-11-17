@@ -44,6 +44,10 @@ OpenJDK 兼容库通过 Gradle 依赖引入，源码与构建脚本见 [google/d
 
 依赖版本锁定于 `pubspec.lock`。Flutter、Cupertino Icons、音频与存储插件保留各自许可；Flutter 构建生成的许可集合可在 **设置 → 关于轻小说文库 → 开源许可与字体授权** 查看。该页面也包括可下载字体与协议适配声明。
 
+阅读书源搜索的旧编码响应使用 `charset` 2.0.1（Apache-2.0）；原许可随 pub 包提供。
+
+Android arm64 目录中的 `libcpp.so` 是从用户提供的 `wenku8-0.5.6-arm64-v8a.apk` 原样提取的预编译运行库，不能由本仓库源码重建；校验值与来源见 [`jniLibs/README.md`](../android/app/src/main/jniLibs/README.md)。
+
 液态玻璃基于 [liquid_glass_easy 5.0.0](https://pub.dev/packages/liquid_glass_easy/versions/5.0.0)，作者 Ahmed Gamil，使用 MIT License。源码和原许可保留于 [`third_party/liquid_glass_easy`](../third_party/liquid_glass_easy)；本地 GPU 性能修改单独记录在 [`PATCHES.md`](../third_party/liquid_glass_easy/PATCHES.md)。应用保留原作者署名，版权与许可随源码及 Flutter 的开源许可集合分发。
 
 ## 内容与展示图

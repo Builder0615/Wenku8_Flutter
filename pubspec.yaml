@@ -56,6 +56,7 @@ dependencies:
   flutter_markdown_plus: ^1.0.12
   markdown: ^7.3.0
   url_launcher: ^6.3.3
+  charset: ^2.0.1
   dict_reader: 1.6.1
   blockchain_utils: 6.0.0
   dart_jieba: 1.0.1

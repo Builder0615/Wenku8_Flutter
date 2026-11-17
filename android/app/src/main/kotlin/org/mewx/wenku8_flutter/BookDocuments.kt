@@ -124,19 +124,24 @@ class BookDocuments internal constructor(
                     } else activity.requestPermissions(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), ALL_REQUEST)
                 } catch (_: Exception) { pending = null; result.error("permission", "系统未提供共享存储授权，请选择指定文件夹", null) }
             }
-            "pickBook", "pickBooks", "pickDictionaryFiles", "pickTextReference", "pickOriginalReference", "pickFont", "pickImage", "openSync", "createSync", "selectScanFolder" -> {
+            "pickBook", "pickBooks", "pickDictionaryFiles", "pickTextReference", "pickOriginalReference", "pickFont", "pickImage", "pickJson", "openSync", "createSync", "selectScanFolder" -> {
                 if (pending != null) { result.error("busy", "请先完成当前文件选择", null); return }
                 val create = call.method == "createSync"
                 val folder = call.method == "selectScanFolder"
                 val choosingImage = call.method == "pickImage"
+                val choosingJson = call.method == "pickJson"
                 val choosingDictionaries = call.method == "pickDictionaryFiles"
                 val choosingBooks = call.method == "pickBook" || call.method == "pickBooks"
                 val linkText = call.method in setOf("pickTextReference", "pickOriginalReference") || call.argument<Boolean>("linkText") == true || call.argument<Boolean>("linkOriginals") == true
                 val intent = Intent(if (folder) Intent.ACTION_OPEN_DOCUMENT_TREE else if (create) Intent.ACTION_CREATE_DOCUMENT else if ((choosingBooks && !linkText) || choosingImage || choosingDictionaries) Intent.ACTION_GET_CONTENT else Intent.ACTION_OPEN_DOCUMENT).apply {
                     if (!folder) { addCategory(Intent.CATEGORY_OPENABLE); type = "*/*" }
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-                    if (!folder && call.method != "pickFont" && !choosingImage && !choosingDictionaries && !linkText) addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                    if (!folder && call.method != "pickFont" && !choosingImage && !choosingJson && !choosingDictionaries && !linkText) addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
                     if (choosingImage) type = "image/*"
+                    if (choosingJson) {
+                        type = "*/*"
+                        putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/json", "text/json", "text/plain", "application/octet-stream"))
+                    }
                     if (create) { type = "application/octet-stream"; putExtra(Intent.EXTRA_TITLE, "文库同步.wenku8sync") }
                     if (call.method == "pickBook" || call.method == "pickBooks") {
                         putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("text/*", "application/epub+zip", "application/zip", "application/x-zip-compressed", "application/x-mobipocket-ebook", "application/vnd.amazon.ebook", "application/pdf", "application/rtf", "application/xml", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/octet-stream"))
@@ -291,6 +296,13 @@ class BookDocuments internal constructor(
                 val display = name(uri)
                 require(display.substringAfterLast('.').lowercase() in setOf("ttf", "otf")) { "请选择 TTF 或 OTF 字体" }
                 val target = File.createTempFile("import-", ".source", root)
+                try { copy(uri, target, 32L * 1024 * 1024) }
+                catch (error: Exception) { target.delete(); throw error }
+                mapOf("name" to display, "path" to target.path)
+            } else if (operation.method == "pickJson") {
+                val display = name(uri)
+                require(display.substringAfterLast('.').equals("json", true)) { "请选择 JSON 文件" }
+                val target = File.createTempFile("source-import-", ".json", root)
                 try { copy(uri, target, 32L * 1024 * 1024) }
                 catch (error: Exception) { target.delete(); throw error }
                 mapOf("name" to display, "path" to target.path)

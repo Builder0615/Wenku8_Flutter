@@ -1,6 +1,8 @@
 import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+
 import 'book_import_limits.dart';
 import 'local_platform.dart';
 import 'portable_book_prepare.dart';
@@ -349,6 +351,11 @@ class BookDocuments {
   Future<void> markScanBook(String token) =>
       channel.invokeMethod<void>('markScanBook', {'token': token});
   Future<void> finishBookScan() => channel.invokeMethod<void>('finishBookScan');
+  Future<BookDocumentSelection?> pickJson() async {
+    final value = await channel.invokeMapMethod<String, dynamic>('pickJson');
+    return value == null ? null : BookDocumentSelection.fromMap(value);
+  }
+
   Future<({String name, String path})?> pickBook() async {
     final value = await channel.invokeMapMethod<String, dynamic>('pickBook');
     return value == null

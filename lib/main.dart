@@ -13,6 +13,7 @@ import 'app_licenses.dart';
 import 'app_repository.dart';
 import 'catalog.dart';
 import 'legacy_wenku_repository.dart';
+import 'legado_book_sources.dart';
 import 'library_state.dart';
 import 'local_platform.dart';
 import 'local_series_actions.dart';
@@ -62,9 +63,8 @@ Future<void> main() async {
       !state.appPalette.themedIcon) {
     await state.refreshSystemPalette();
   }
-  if (chineseLocale(
-        state.language.locale ?? binding.platformDispatcher.locale,
-      ).countryCode !=
+  if (chineseLocale(state.language.locale ?? binding.platformDispatcher.locale)
+          .countryCode !=
       'CN') {
     await ChineseText.prepare();
   }
@@ -82,6 +82,8 @@ Future<void> main() async {
   final WenkuAccount? account = LocalPlatform.fileActions
       ? WenkuAccount()
       : null;
+  final legadoBookSources = LegadoBookSourceStore();
+  unawaited(legadoBookSources.load());
   const remote = LegacyWenkuRepository();
   final repository = LocalPlatform.fileActions
       ? await openApplicationLibrary(remote: remote, network: network)
@@ -128,6 +130,7 @@ Future<void> main() async {
       features: features,
       listening: listening,
       network: network,
+      legadoBookSources: legadoBookSources,
       updates: defaultTargetPlatform == TargetPlatform.android
           ? AppUpdates(preferences: await SharedPreferences.getInstance())
           : LocalPlatform.ios
@@ -164,6 +167,7 @@ class NovelApp extends StatefulWidget {
     this.listening,
     this.updates,
     this.network,
+    this.legadoBookSources,
   });
 
   final LibraryState state;
@@ -172,6 +176,7 @@ class NovelApp extends StatefulWidget {
   final ListeningController? listening;
   final AppUpdates? updates;
   final NetworkStatus? network;
+  final LegadoBookSourceStore? legadoBookSources;
   @override
   State<NovelApp> createState() => _NovelAppState();
 }
@@ -653,6 +658,7 @@ class _NovelAppState extends State<NovelApp> with WidgetsBindingObserver {
     state.settingsChanges.removeListener(_orientationChanged);
     WidgetsBinding.instance.removeObserver(this);
     features?.shelfSync?.dispose();
+    widget.legadoBookSources?.dispose();
     _updateNavigation.dispose();
     updates?.removeListener(_queueStartupReading);
     _readerHandoff.dispose();
@@ -777,6 +783,7 @@ class _NovelAppState extends State<NovelApp> with WidgetsBindingObserver {
                           state: state,
                           repository: repository,
                           network: widget.network,
+                          legadoBookSources: widget.legadoBookSources,
                         ),
                       );
                       final repo = repository;

@@ -9,6 +9,7 @@ import 'catalog.dart';
 import 'dock_layout.dart';
 import 'feature_pages.dart';
 import 'library_state.dart';
+import 'legado_book_sources.dart';
 import 'offline_repository.dart';
 import 'pages.dart' show SettingsPage;
 import 'ui_notifiers.dart';
@@ -21,10 +22,12 @@ class MyPage extends StatelessWidget {
     super.key,
     required this.state,
     required this.repository,
+    this.legadoBookSources,
     this.showHeader = true,
   });
   final LibraryState state;
   final NovelRepository repository;
+  final LegadoBookSourceStore? legadoBookSources;
   final bool showHeader;
 
   Widget buildHeader(BuildContext context) => const Align(
@@ -36,6 +39,7 @@ class MyPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final features = WenkuFeaturesScope.maybeOf(context);
     final updates = AppUpdatesScope.maybeOf(context);
+    final sourceStore = legadoBookSources;
     return GlassHeaderLayout(
       showHeader: showHeader,
       header: buildHeader(context),
@@ -45,9 +49,8 @@ class MyPage extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 760),
           child: ListView(
             key: const PageStorageKey('my-page'),
-            padding: featurePadding(
-              context,
-            ).copyWith(bottom: DockLayout.scrollPaddingOf(context)),
+            padding: featurePadding(context)
+                .copyWith(bottom: DockLayout.scrollPaddingOf(context)),
             children: [
               AnimatedBuilder(
                 animation: Listenable.merge([
@@ -150,9 +153,9 @@ class MyPage extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 12,
                                   height: 1.6,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                               ),
                             ],
@@ -169,6 +172,33 @@ class MyPage extends StatelessWidget {
                 },
               ),
               const SizedBox(height: 24),
+              if (sourceStore != null) ...[
+                AnimatedBuilder(
+                  animation: sourceStore,
+                  builder: (context, _) => FeatureEntry(
+                    key: const ValueKey('my-reading-book-sources'),
+                    title: '阅读书源',
+                    subtitle: sourceStore.sources.isEmpty
+                        ? '导入和管理书源配置'
+                        : sourceStore.sources.length.toString() +
+                              ' 个书源 · 导入、管理并搜索',
+                    icon: CupertinoIcons.book,
+                    onTap: () => pushNovelPage<void>(
+                      context,
+                      ArchiveFeaturePage(
+                        title: '阅读书源',
+                        code: 'READING / BOOK SOURCES',
+                        child: LegadoBookSourcesPage(
+                          store: sourceStore,
+                          showHeader: false,
+                        ),
+                      ),
+                      reduceMotion: state.reduceMotion,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
               FeatureEntry(
                 key: const ValueKey('my-statistics'),
                 title: '统计',

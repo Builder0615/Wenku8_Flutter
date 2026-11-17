@@ -40,7 +40,7 @@ Milky glass, editorial typography, and a three-dimensional bookshelf. Discover a
 >
 > **The app is entirely free.** We do not sell memberships, activation codes, or feature unlocks. Please beware of anyone charging for access in the name of this project or its developer.
 >
-> **Only Wenku8 and local imports are supported. Other sources and custom book sources are no longer supported.** The app supports Android, iOS, and HarmonyOS and is not an official Wenku8 app.
+> **Wenku8 remains the primary online library.** Import Reading Sources from My → Reading Sources to include enabled sources in Discover title and author searches; source results open in their websites. The app supports Android, iOS, and HarmonyOS and is not an official Wenku8 app.
 
 ## A look inside
 

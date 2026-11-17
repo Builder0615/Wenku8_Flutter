@@ -122,6 +122,8 @@ import 'recent_searches.dart';
 import 'ui_notifiers.dart';
 import 'route_identity.dart';
 import 'feature_pages.dart';
+import 'legado_book_sources.dart';
+import 'legado_search.dart';
 import 'wenku_features.dart';
 import 'legacy_import_page.dart';
 import 'legacy_transport.dart';
@@ -135,10 +137,12 @@ class HomeShell extends StatefulWidget {
     required this.state,
     required this.repository,
     this.network,
+    this.legadoBookSources,
   });
   final LibraryState state;
   final NovelRepository repository;
   final NetworkStatus? network;
+  final LegadoBookSourceStore? legadoBookSources;
 
   @override
   State<HomeShell> createState() => HomeShellState();
@@ -172,6 +176,12 @@ class HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
   );
   late final _searchFeed = NovelFeedController(widget.repository, search: true)
     ..searchField = BookSearchField.title;
+  LegadoBookSourceSearchController? _legadoSearch;
+  Timer? _legadoSearchDebounce;
+  String? _pendingLegadoQuery;
+  BookSearchField? _pendingLegadoField;
+  String? _startedLegadoQuery;
+  BookSearchField? _startedLegadoField;
   LocalBookStore? get _localBooks => widget.repository is OfflineNovelRepository
       ? (widget.repository as OfflineNovelRepository).local
       : null;
@@ -248,6 +258,9 @@ class HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
     _navigation.addListener(_navigationChanged);
     _searchText.addListener(_searchEdited);
     _searchFeed.addListener(_searchSucceeded);
+    if (widget.legadoBookSources case final store?) {
+      _legadoSearch = LegadoBookSourceSearchController(store);
+    }
     widget.state.blockedTagsChanges.addListener(_blockedTagsChanged);
     _blockedTagsChanged();
     if (widget.repository case final OfflineNovelRepository offline) {
@@ -274,6 +287,7 @@ class HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
     final settings = MyPage(
       state: widget.state,
       repository: widget.repository,
+      legadoBookSources: widget.legadoBookSources,
       showHeader: false,
     );
     final local = widget.repository is OfflineNovelRepository
@@ -392,6 +406,8 @@ class HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
     _searchFocus.dispose();
     _catalog.dispose();
     _searchFeed.dispose();
+    _legadoSearchDebounce?.cancel();
+    _legadoSearch?.dispose();
     _shelfSearch.dispose();
     _localSearch.dispose();
     _localLibrary.dispose();
@@ -455,6 +471,15 @@ class HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
     _dismissSearchKeyboard();
     _searchFocus.canRequestFocus = false;
     _activeSearch.cancelScheduledSearch();
+    if (_searchScope == 0) {
+      _legadoSearchDebounce?.cancel();
+      _legadoSearchDebounce = null;
+      _pendingLegadoQuery = null;
+      _pendingLegadoField = null;
+      _startedLegadoQuery = null;
+      _startedLegadoField = null;
+      _legadoSearch?.cancel();
+    }
     setState(() {
       _searchOpen = false;
       _searchCovered = false;
@@ -476,6 +501,10 @@ class HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
   }
 
   void _searchSucceeded() {
+    final sourceSearch = _legadoSearch;
+    if (_searchScope == 0 && sourceSearch != null) {
+      _scheduleLegadoSearch(sourceSearch);
+    }
     if (_searchScope != 0 ||
         _searchFeed.loading ||
         _searchFeed.error != null ||
@@ -491,6 +520,44 @@ class HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
         if (mounted) showNovelFeedback(context, '最近搜索保存失败');
       }),
     );
+  }
+
+  void _scheduleLegadoSearch(LegadoBookSourceSearchController sourceSearch) {
+    final query = _searchFeed.query.trim();
+    final field = _searchFeed.searchField;
+    if (query.isEmpty) {
+      _legadoSearchDebounce?.cancel();
+      _legadoSearchDebounce = null;
+      _pendingLegadoQuery = null;
+      _pendingLegadoField = null;
+      _startedLegadoQuery = '';
+      _startedLegadoField = field;
+      if (sourceSearch.query.isNotEmpty || sourceSearch.results.isNotEmpty) {
+        unawaited(sourceSearch.searchFor('', field: field, force: true));
+      }
+      return;
+    }
+
+    if (_pendingLegadoQuery == query && _pendingLegadoField == field) return;
+    if (_startedLegadoQuery == query && _startedLegadoField == field) return;
+
+    _legadoSearchDebounce?.cancel();
+    sourceSearch.cancel();
+    _startedLegadoQuery = null;
+    _startedLegadoField = null;
+    _pendingLegadoQuery = query;
+    _pendingLegadoField = field;
+    _legadoSearchDebounce = Timer(const Duration(milliseconds: 300), () {
+      _legadoSearchDebounce = null;
+      _pendingLegadoQuery = null;
+      _pendingLegadoField = null;
+      if (!mounted || _searchScope != 0 || _searchFeed.query.trim() != query) {
+        return;
+      }
+      _startedLegadoQuery = query;
+      _startedLegadoField = field;
+      unawaited(sourceSearch.searchFor(query, field: field, force: true));
+    });
   }
 
   void _recallSearch(String query) {
@@ -641,6 +708,9 @@ class HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
                                   feed: _activeSearch,
                                   state: widget.state,
                                   repository: widget.repository,
+                                  legadoSearch: _searchScope == 0
+                                      ? _legadoSearch
+                                      : null,
                                   onOpenBook: _dismissSearchKeyboard,
                                   allowBlockedTags: _searchScope == 0,
                                   showSources:
@@ -3730,6 +3800,7 @@ class InlineSearchResults extends StatelessWidget {
     required this.repository,
     required this.feed,
     required this.onOpenBook,
+    this.legadoSearch,
     this.onRecall,
     this.emptyQueryTitle = '你可能会喜欢',
     this.showSources = false,
@@ -3739,6 +3810,7 @@ class InlineSearchResults extends StatelessWidget {
   final LibraryState state;
   final NovelRepository repository;
   final NovelFeedController feed;
+  final LegadoBookSourceSearchController? legadoSearch;
   final VoidCallback onOpenBook;
   final ValueChanged<String>? onRecall;
   final String emptyQueryTitle;
@@ -3913,6 +3985,13 @@ class InlineSearchResults extends StatelessWidget {
                     ],
                   ),
                 ),
+              if (legadoSearch != null && feed.query.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: LegadoSearchResultsPanel(
+                    controller: legadoSearch!,
+                    query: feed.query,
+                  ),
+                ),
             ],
           ),
         ),
@@ -3922,6 +4001,52 @@ class InlineSearchResults extends StatelessWidget {
 
   Widget _buildResults(BuildContext context) {
     final books = feed.items;
+    if (books.isEmpty && feed.query.isNotEmpty && legadoSearch != null) {
+      return ListView(
+        padding: EdgeInsets.fromLTRB(
+          24,
+          MediaQuery.paddingOf(context).top + FrostedHeader.toolbarHeight + 20,
+          24,
+          MediaQuery.paddingOf(context).bottom + 24,
+        ),
+        children: [
+          if (allowBlockedTags)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: BlockedTagsButton(
+                key: const ValueKey('search-blocked-tags-manage'),
+                state: state,
+                feed: feed,
+                compact: true,
+              ),
+            ),
+          if (feed.loading && !feed.hasLoaded)
+            const BookCollectionSkeleton(rows: 2, label: '正在搜索文库'),
+          if (feed.error != null) ...[
+            AppText(
+              '文库搜索未完成：' + feed.failureMessage,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            GlassTextButton(
+              onPressed: feed.retry,
+              child: const AppText('重试文库搜索'),
+            ),
+          ] else if (!feed.loading || feed.hasLoaded)
+            AppText(
+              '文库没有找到匹配的书籍',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          LegadoSearchResultsPanel(
+            controller: legadoSearch!,
+            query: feed.query,
+          ),
+        ],
+      );
+    }
     if (books.isEmpty &&
         feed.query.isEmpty &&
         onRecall != null &&
@@ -4095,7 +4220,17 @@ class InlineSearchResults extends StatelessWidget {
               );
             }
             if (index == books.length + 1) {
-              return FeedFooter(feed: feed, horizontalPadding: 0);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  FeedFooter(feed: feed, horizontalPadding: 0),
+                  if (legadoSearch != null && feed.query.isNotEmpty)
+                    LegadoSearchResultsPanel(
+                      controller: legadoSearch!,
+                      query: feed.query,
+                    ),
+                ],
+              );
             }
             final book = books[index - 1];
             return LoadedContentItem(
