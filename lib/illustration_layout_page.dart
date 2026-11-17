@@ -213,9 +213,8 @@ class _IllustrationLayoutPageState extends State<IllustrationLayoutPage> {
                           return Semantics(
                             selected: _selected == url,
                             label: '本卷插图 ${index + 1}',
-                            child: JellyTapSurface(
+                            child: GestureDetector(
                               key: ValueKey('illustration-choice-$index'),
-                              haptic: HapticCue.selection,
                               onTap: _saving
                                   ? null
                                   : () => setState(() => _selected = url),
@@ -271,7 +270,7 @@ class _IllustrationLayoutPageState extends State<IllustrationLayoutPage> {
                       child: ContentPanel(
                         child: Row(
                           children: [
-                            const ArchiveIcon(CupertinoIcons.photo, size: 20),
+                            const Icon(CupertinoIcons.photo, size: 20),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(

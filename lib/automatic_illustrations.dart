@@ -83,9 +83,5 @@ ReaderContent autoIllustrationsFromReference(
     ]),
     inlineOwners: Map.unmodifiable(owners),
     placementIds: source.placementIds,
-    formats: source.formats,
-    notes: source.notes,
-    revision: source.revision,
-    coordinateMap: source.coordinateMap,
   );
 }

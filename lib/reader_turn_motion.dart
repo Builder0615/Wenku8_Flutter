@@ -17,7 +17,6 @@ class ReaderTurnScope extends InheritedWidget {
     this.relay = false,
     this.vertical = false,
     this.leafSize = Size.zero,
-    this.travelWidth,
   });
 
   final Animation<double> animation;
@@ -26,10 +25,6 @@ class ReaderTurnScope extends InheritedWidget {
   final int slot, slots;
   final bool relay, vertical;
   final Size leafSize;
-
-  /// Motion crosses the complete sheet, including the resting text margins.
-  /// Keep leafSize local to the ink for paragraph/column ordering.
-  final double? travelWidth;
 
   double relayProgress(double rank) {
     final start = (slot + .02 + .18 * rank.clamp(0.0, 1.0)) / slots;
@@ -91,7 +86,7 @@ class ReaderTurnScope extends InheritedWidget {
       // Translate complete paragraphs/columns, rather than wiping a diagonal
       // through stationary glyphs. Both layers keep their original opacity.
       final distance = outgoing ? -t : 1 - t;
-      return Offset((travelWidth ?? leafSize.width) * direction * distance, 0);
+      return Offset(leafSize.width * direction * distance, 0);
     }
     return outgoing
         ? Offset(-16 * direction, -4) * t
@@ -144,7 +139,6 @@ class ReaderTurnScope extends InheritedWidget {
       relay != oldWidget.relay ||
       vertical != oldWidget.vertical ||
       leafSize != oldWidget.leafSize ||
-      travelWidth != oldWidget.travelWidth ||
       slot != oldWidget.slot ||
       slots != oldWidget.slots;
 }
@@ -157,17 +151,15 @@ class ReaderTurnPart extends StatelessWidget {
     this.index = 0,
     this.count = 1,
     this.bounds,
-    this.motion,
     required this.child,
   });
   final int index, count;
   final Rect? bounds;
-  final ReaderTurnScope? motion;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final scope = motion ?? ReaderTurnScope.maybeOf(context);
+    final scope = ReaderTurnScope.maybeOf(context);
     return _TurnPart(
       scope: scope ?? ReaderTurnScope.idle,
       index: index,

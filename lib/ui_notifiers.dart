@@ -49,17 +49,11 @@ class SelectedValueBuilder<T, S> extends StatefulWidget {
     required this.select,
     required this.builder,
     this.child,
-    this.pauseWhenCovered = false,
   });
   final ValueListenable<T> listenable;
   final S Function(T value) select;
   final Widget Function(BuildContext context, S value, Widget? child) builder;
   final Widget? child;
-
-  /// Covered routes retain their last UI and catch up once when revealed.
-  /// This does not infer visibility from TickerMode, which may only disable
-  /// animation on a still-visible page, and never pauses the data source.
-  final bool pauseWhenCovered;
 
   @override
   State<SelectedValueBuilder<T, S>> createState() =>
@@ -69,42 +63,15 @@ class SelectedValueBuilder<T, S> extends StatefulWidget {
 class _SelectedValueBuilderState<T, S>
     extends State<SelectedValueBuilder<T, S>> {
   late S _value;
-  ValueListenable<T>? _subscribedTo;
-  bool _routeCurrent = true;
 
   @override
   void initState() {
     super.initState();
     _value = widget.select(widget.listenable.value);
-    _subscribe();
-  }
-
-  void _subscribe() {
-    final target = _routeCurrent ? widget.listenable : null;
-    if (_subscribedTo == target) return;
-    _subscribedTo?.removeListener(_changed);
-    _subscribedTo = target;
-    target?.addListener(_changed);
-  }
-
-  void _readActivity() {
-    final wasCurrent = _routeCurrent;
-    _routeCurrent =
-        !widget.pauseWhenCovered || ModalRoute.isCurrentOf(context) != false;
-    _subscribe();
-    if (_routeCurrent && !wasCurrent) {
-      _value = widget.select(widget.listenable.value);
-    }
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _readActivity();
+    widget.listenable.addListener(_changed);
   }
 
   void _changed() {
-    if (!_routeCurrent) return;
     final value = widget.select(widget.listenable.value);
     if (value != _value) setState(() => _value = value);
   }
@@ -112,15 +79,18 @@ class _SelectedValueBuilderState<T, S>
   @override
   void didUpdateWidget(SelectedValueBuilder<T, S> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _readActivity();
+    if (oldWidget.listenable != widget.listenable) {
+      oldWidget.listenable.removeListener(_changed);
+      widget.listenable.addListener(_changed);
+    }
     // A new projection can refer to a different paragraph or book even when
     // its source is unchanged. The parent already scheduled this build.
-    if (_routeCurrent) _value = widget.select(widget.listenable.value);
+    _value = widget.select(widget.listenable.value);
   }
 
   @override
   void dispose() {
-    _subscribedTo?.removeListener(_changed);
+    widget.listenable.removeListener(_changed);
     super.dispose();
   }
 
@@ -170,53 +140,28 @@ class ActiveListenableBuilder extends StatefulWidget {
 
 class _ActiveListenableBuilderState extends State<ActiveListenableBuilder> {
   bool _active = false;
-  bool _dirty = false;
-  ValueListenable<TickerModeData>? _tickerMode;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.listenable.addListener(_changed);
-  }
 
   void _changed() {
-    _dirty = true;
-    if (_active) setState(() {});
-  }
-
-  void _modeChanged() {
-    final active = _tickerMode!.value.enabled;
-    if (_active == active) return;
-    _active = active;
-    if (active && _dirty) setState(() {});
-  }
-
-  void _updateTickerMode() {
-    // Route coverage and retained-tab visibility change this notifier without
-    // changing the page's data. Do not turn hiding/showing into a full rebuild.
-    final mode = TickerMode.getValuesNotifier(context);
-    if (_tickerMode == mode) return;
-    _tickerMode?.removeListener(_modeChanged);
-    _tickerMode = mode..addListener(_modeChanged);
-    _modeChanged();
+    if (mounted) setState(() {});
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _updateTickerMode();
-  }
-
-  @override
-  void activate() {
-    super.activate();
-    _updateTickerMode();
+    final active = TickerMode.valuesOf(context).enabled;
+    if (active == _active) return;
+    _active = active;
+    if (active) {
+      widget.listenable.addListener(_changed);
+    } else {
+      widget.listenable.removeListener(_changed);
+    }
   }
 
   @override
   void didUpdateWidget(ActiveListenableBuilder oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.listenable != widget.listenable) {
+    if (_active && oldWidget.listenable != widget.listenable) {
       oldWidget.listenable.removeListener(_changed);
       widget.listenable.addListener(_changed);
     }
@@ -224,14 +169,10 @@ class _ActiveListenableBuilderState extends State<ActiveListenableBuilder> {
 
   @override
   void dispose() {
-    _tickerMode?.removeListener(_modeChanged);
-    widget.listenable.removeListener(_changed);
+    if (_active) widget.listenable.removeListener(_changed);
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
-    _dirty = false;
-    return widget.builder(context);
-  }
+  Widget build(BuildContext context) => widget.builder(context);
 }

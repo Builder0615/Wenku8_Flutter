@@ -1,16 +1,10 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 
 import 'archive_design.dart';
-import 'app_language.dart' show AppText;
-import 'app_palette.dart';
 import 'archive_shelf_geometry.dart';
-import 'archive_shelf_loading.dart';
 import 'book_collection_layout.dart';
-import 'book_grid_density.dart';
-import 'performance_preferences.dart';
 
 enum SkeletonLayout {
   library,
@@ -26,34 +20,6 @@ enum SkeletonLayout {
   inline,
   button,
   cover,
-}
-
-/// Feedback for an existing page being updated, not a substitute for its data.
-class RefreshProgress extends StatelessWidget {
-  const RefreshProgress({super.key, this.label = '正在刷新'});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final ink = Theme.of(context).colorScheme.onSurface;
-    return Semantics(
-      label: label,
-      liveRegion: true,
-      child: IgnorePointer(
-        child: Center(
-          child: RepaintBoundary(
-            child: LinearProgressIndicator(
-              value: MediaQuery.disableAnimationsOf(context) ? .5 : null,
-              minHeight: 2,
-              borderRadius: BorderRadius.circular(2),
-              color: ink.withValues(alpha: .45),
-              backgroundColor: ink.withValues(alpha: .06),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// Static placeholders: no shimmer, repeating ticker, filter or loading mascot.
@@ -84,13 +50,6 @@ class LoadingSkeleton extends StatelessWidget {
                 top: topInset,
                 ink: Theme.of(context).colorScheme.onSurface,
                 dark: Theme.of(context).brightness == Brightness.dark,
-                base: Theme.of(context).brightness == Brightness.dark
-                    ? Theme.of(
-                            context,
-                          ).extension<AppTonalColors>()?.glassSurface ??
-                          ArchiveDesign.darkSurface
-                    : Theme.of(context).extension<AppTonalColors>()?.milk ??
-                          ArchiveDesign.milk,
               ),
               child: const SizedBox.expand(),
             ),
@@ -107,13 +66,11 @@ class _SkeletonPainter extends CustomPainter {
     required this.top,
     required this.ink,
     required this.dark,
-    required this.base,
   });
   final SkeletonLayout layout;
   final double top;
   final Color ink;
   final bool dark;
-  final Color base;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -258,7 +215,6 @@ class _SkeletonPainter extends CustomPainter {
       _ArchiveShelfSkeletonPainter(
         dark: dark,
         ink: ink,
-        base: base,
       ).paint(canvas, Size(bankWidth, rowHeight));
       canvas.restore();
       y += rowHeight + 16;
@@ -289,22 +245,13 @@ class _SkeletonPainter extends CustomPainter {
       layout != oldDelegate.layout ||
       top != oldDelegate.top ||
       ink != oldDelegate.ink ||
-      base != oldDelegate.base ||
       dark != oldDelegate.dark;
 }
 
-/// Keeps the loading collection aligned with the selected library layout.
 class LibrarySkeleton extends StatelessWidget {
-  const LibrarySkeleton({
-    super.key,
-    this.header,
-    this.featured = true,
-    this.grid = false,
-    this.gridDensity = const BookGridDensity.auto(),
-  });
+  const LibrarySkeleton({super.key, this.header, this.featured = true});
   final Widget? header;
-  final bool featured, grid;
-  final BookGridDensity gridDensity;
+  final bool featured;
   @override
   Widget build(BuildContext context) => Semantics(
     label: '正在翻开文库',
@@ -335,46 +282,17 @@ class LibrarySkeleton extends StatelessWidget {
             child: LoadingSkeleton(layout: SkeletonLayout.actions),
           ),
           const SizedBox(height: 8),
-          BookCollectionSkeleton(grid: grid, gridDensity: gridDensity),
+          const BookCollectionSkeleton(),
         ],
       ),
     ),
   );
 }
 
-/// The loading wave uses the same solids and frame clock as the arriving bank.
-/// Other skeletons stay static, and reduced-motion keeps this bank still too.
-class ArchiveShelfSkeleton extends StatefulWidget {
+/// A static parallel file bank, with the same solids, crest and allocated space
+/// as the loaded carousel. No legacy featured-card panel, shimmer or ticker.
+class ArchiveShelfSkeleton extends StatelessWidget {
   const ArchiveShelfSkeleton({super.key});
-  @override
-  State<ArchiveShelfSkeleton> createState() => _ArchiveShelfSkeletonState();
-}
-
-class _ArchiveShelfSkeletonState extends State<ArchiveShelfSkeleton>
-    with SingleTickerProviderStateMixin {
-  late final _wave = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1700),
-  );
-  bool _animated = false;
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _animated =
-        !MediaQuery.disableAnimationsOf(context) &&
-        PerformanceScope.of(context).motion &&
-        PerformanceScope.of(context).shelf3d &&
-        TickerMode.valuesOf(context).enabled;
-    if (_animated && !_wave.isAnimating) _wave.repeat();
-    if (!_animated) _wave.stop();
-  }
-
-  @override
-  void dispose() {
-    _wave.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) => IgnorePointer(
     child: ExcludeSemantics(
@@ -395,18 +313,8 @@ class _ArchiveShelfSkeletonState extends State<ArchiveShelfSkeleton>
                     child: CustomPaint(
                       key: const ValueKey('archive-shelf-skeleton'),
                       painter: _ArchiveShelfSkeletonPainter(
-                        wave: _animated ? _wave : null,
                         dark: Theme.of(context).brightness == Brightness.dark,
                         ink: Theme.of(context).colorScheme.onSurface,
-                        base: Theme.of(context).brightness == Brightness.dark
-                            ? Theme.of(
-                                    context,
-                                  ).extension<AppTonalColors>()?.glassSurface ??
-                                  ArchiveDesign.darkSurface
-                            : Theme.of(
-                                    context,
-                                  ).extension<AppTonalColors>()?.milk ??
-                                  ArchiveDesign.milk,
                       ),
                       child: SizedBox(
                         width: double.infinity,
@@ -435,16 +343,9 @@ class _ArchiveShelfSkeletonState extends State<ArchiveShelfSkeleton>
 }
 
 class _ArchiveShelfSkeletonPainter extends CustomPainter {
-  const _ArchiveShelfSkeletonPainter({
-    required this.dark,
-    required this.ink,
-    required this.base,
-    this.wave,
-  }) : super(repaint: wave);
+  const _ArchiveShelfSkeletonPainter({required this.dark, required this.ink});
   final bool dark;
   final Color ink;
-  final Color base;
-  final Listenable? wave;
   @override
   void paint(Canvas canvas, Size size) {
     final g = ArchiveShelfGeometry.coverFor(size.width);
@@ -456,6 +357,7 @@ class _ArchiveShelfSkeletonPainter extends CustomPainter {
         ArchiveShelfGeometry.footprint(spine, g) / 2 +
         ArchiveShelfGeometry.pullDistance(g) * ArchiveShelfGeometry.depthX;
     final edge = (size.width / pitch / 2).ceil() + 5;
+    final base = dark ? ArchiveDesign.darkSurface : ArchiveDesign.milk;
     final rule = Paint()
       ..color = ink.withValues(alpha: .12)
       ..style = PaintingStyle.stroke
@@ -470,17 +372,7 @@ class _ArchiveShelfSkeletonPainter extends CustomPainter {
           : 0.0;
       final origin =
           ArchiveShelfGeometry.origin(g, h, weight) +
-          Offset(
-            centre + i * pitch,
-            ArchiveShelfGeometry.railY(i.toDouble()) +
-                (wave == null
-                    ? 0
-                    : archiveLoadingLift(
-                        i.toDouble(),
-                        SchedulerBinding.instance.currentSystemFrameTimeStamp,
-                        1,
-                      )),
-          );
+          Offset(centre + i * pitch, ArchiveShelfGeometry.railY(i.toDouble()));
       final front = Offset(spine, spine * .1);
       final depth = Offset(
         g * ArchiveShelfGeometry.depthX,
@@ -537,18 +429,14 @@ class _ArchiveShelfSkeletonPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ArchiveShelfSkeletonPainter oldDelegate) =>
-      dark != oldDelegate.dark ||
-      ink != oldDelegate.ink ||
-      base != oldDelegate.base ||
-      wave != oldDelegate.wave;
+      dark != oldDelegate.dark || ink != oldDelegate.ink;
 }
 
 class SearchSkeleton extends StatelessWidget {
-  const SearchSkeleton({super.key, this.status});
-  final String? status;
+  const SearchSkeleton({super.key});
   @override
   Widget build(BuildContext context) => Semantics(
-    label: status ?? '正在找故事',
+    label: '正在找故事',
     liveRegion: true,
     child: ClipRect(
       child: OverflowBox(
@@ -561,19 +449,14 @@ class SearchSkeleton extends StatelessWidget {
             22,
             0,
           ),
-          child: Column(
+          child: const Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (status case final text?)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: AppText(text),
-                ),
-              const SizedBox(
+              SizedBox(
                 height: 54,
                 child: LoadingSkeleton(layout: SkeletonLayout.actions),
               ),
-              const BookCollectionSkeleton(rows: 6),
+              BookCollectionSkeleton(rows: 6),
             ],
           ),
         ),
@@ -582,66 +465,33 @@ class SearchSkeleton extends StatelessWidget {
   );
 }
 
-/// Uses the arriving collection's cover geometry instead of an automatic grid.
 class BookCollectionSkeleton extends StatelessWidget {
   const BookCollectionSkeleton({
     super.key,
     this.rows = 3,
     this.label = '正在载入书籍',
-    this.grid = false,
-    this.gridDensity = const BookGridDensity.auto(),
   });
   final int rows;
   final String label;
-  final bool grid;
-  final BookGridDensity gridDensity;
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final geometry = grid && !gridDensity.automatic
-          ? BookGridViewport(
-              width: constraints.maxWidth,
-              height: MediaQuery.sizeOf(context).height,
-              textScaler: MediaQuery.textScalerOf(context),
-            ).resolve(gridDensity)
-          : null;
-      final columns = grid
-          ? geometry?.columns ??
-                BookCollectionLayout.gridColumnsFor(constraints.maxWidth)
-          : BookCollectionLayout.columnsFor(constraints.maxWidth);
-      final gap = grid
-          ? BookCollectionLayout.gridGap
-          : BookCollectionLayout.gap;
-      final collection = Column(
+      final columns = BookCollectionLayout.columnsFor(constraints.maxWidth);
+      return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           for (var row = 0; row < rows; row++)
-            Padding(
-              padding: EdgeInsets.only(
-                bottom: !grid
-                    ? 0
-                    : geometry?.fixed == true
-                    ? BookCollectionLayout.gridGap
-                    : BookCollectionLayout.gap,
-              ),
-              child: Row(
-                children: [
-                  for (var column = 0; column < columns; column++) ...[
-                    if (column != 0) SizedBox(width: gap),
-                    Expanded(
-                      child: grid
-                          ? BookGridSkeleton(label: label)
-                          : BookRowSkeleton(label: label),
-                    ),
-                  ],
+            Row(
+              children: [
+                for (var column = 0; column < columns; column++) ...[
+                  if (column != 0)
+                    const SizedBox(width: BookCollectionLayout.gap),
+                  Expanded(child: BookRowSkeleton(label: label)),
                 ],
-              ),
+              ],
             ),
         ],
       );
-      return geometry?.fixed == true
-          ? BookGridScope(geometry: geometry!, child: collection)
-          : collection;
     },
   );
 }
@@ -699,75 +549,4 @@ class BookRowSkeleton extends StatelessWidget {
     width: double.infinity,
     child: LoadingSkeleton(layout: SkeletonLayout.bookRow, label: label),
   );
-}
-
-class BookGridSkeleton extends StatelessWidget {
-  const BookGridSkeleton({super.key, this.label = '正在载入书籍'});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final geometry = BookGridScope.of(context);
-    if (geometry?.fixed == true) {
-      return Semantics(
-        label: label,
-        child: ExcludeSemantics(
-          child: SizedBox(
-            height: geometry!.rowHeight,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: SizedBox(
-                    width: geometry.coverWidth,
-                    height: geometry.coverHeight,
-                    child: const LoadingSkeleton(layout: SkeletonLayout.cover),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                InlineSkeleton(height: geometry.viewport.titleHeight),
-                const SizedBox(height: 4),
-                InlineSkeleton(height: geometry.viewport.authorHeight),
-                const SizedBox(height: 4),
-                InlineSkeleton(height: geometry.viewport.progressHeight),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final coverHeight =
-            constraints.maxWidth / BookCollectionLayout.gridCoverAspectRatio;
-        final captionHeight = constraints.maxHeight - coverHeight;
-        return Semantics(
-          label: label,
-          liveRegion: true,
-          child: ExcludeSemantics(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  height: coverHeight,
-                  child: const LoadingSkeleton(layout: SkeletonLayout.cover),
-                ),
-                // Auto-layout cells reserve their own footer space. Keep the
-                // cover ratio and only draw captions that fit the actual cell.
-                if (captionHeight >= 28) ...[
-                  const SizedBox(height: 10),
-                  const InlineSkeleton(height: 18),
-                ],
-                if (captionHeight >= 48) ...[
-                  const SizedBox(height: 6),
-                  InlineSkeleton(width: constraints.maxWidth * .65, height: 14),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 }

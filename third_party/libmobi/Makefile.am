@@ -1,6 +1,6 @@
 # project Makefile.am
 
-SUBDIRS = src tools
+SUBDIRS = src tools tests
 
 EXTRA_DIST = README.md autogen.sh
 

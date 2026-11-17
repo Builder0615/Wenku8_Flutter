@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
 import 'app_ui.dart';
-import 'dock_layout.dart';
-import 'performance_preferences.dart';
 
 class GlassDockItem {
   const GlassDockItem(
@@ -16,8 +14,6 @@ class GlassDockItem {
     this.semanticLabel,
     this.selectableOnDrag = true,
     this.id,
-    this.symbol,
-    this.haptic = HapticCue.selection,
   });
   final IconData icon;
   final String label;
@@ -25,8 +21,6 @@ class GlassDockItem {
   final String? semanticLabel;
   final bool selectableOnDrag;
   final Object? id;
-  final ArchiveSymbol? symbol;
-  final HapticCue haptic;
   Object get identity => id ?? (icon, label);
 }
 
@@ -35,8 +29,8 @@ class _DockSlot {
   GlassDockItem item;
   double fromWidth;
   bool present;
-  double width(double progress, double targetWidth) =>
-      fromWidth + ((present ? targetWidth : 0) - fromWidth) * progress;
+  double width(double progress) =>
+      fromWidth + ((present ? 184 / 3 : 0) - fromWidth) * progress;
 }
 
 /// The touch preview is local to the dock: pages only change on release.
@@ -45,39 +39,24 @@ class GlassDock extends StatefulWidget {
     super.key,
     required this.selectedIndex,
     required this.onSelected,
-    this.onReselected,
     this.reduceMotion = false,
-    this.animateInactiveIcons = false,
-    this.itemWidth = DockLayout.itemWidth,
     this.items = const [
       GlassDockItem(CupertinoIcons.house, '发现'),
-      GlassDockItem(CupertinoIcons.book, '书架', symbol: ArchiveSymbol.shelf),
+      GlassDockItem(CupertinoIcons.book, '书架'),
       GlassDockItem(CupertinoIcons.settings, '设置'),
     ],
-  }) : assert(items.length >= 2 && items.length <= 5),
-       assert(itemWidth >= 48);
+  }) : assert(items.length >= 2 && items.length <= 4);
 
   final int selectedIndex;
   final ValueChanged<int> onSelected;
-
-  /// A deliberate tap on the selected item, not a drag ending in its lane.
-  final ValueChanged<int>? onReselected;
   final bool reduceMotion;
-
-  /// Navigation only animates the destination. Action docks (previous/next
-  /// chapter) can also animate invoked controls without selecting their lane.
-  final bool animateInactiveIcons;
   final List<GlassDockItem> items;
-
-  /// Optional narrow-screen lanes; existing navigation keeps its geometry.
-  final double itemWidth;
 
   @override
   State<GlassDock> createState() => _GlassDockState();
 }
 
 class _GlassDockState extends State<GlassDock> with TickerProviderStateMixin {
-  static const _edge = DockLayout.horizontalInset;
   late final AnimationController _position = AnimationController.unbounded(
     vsync: this,
     value: widget.selectedIndex.toDouble(),
@@ -105,7 +84,6 @@ class _GlassDockState extends State<GlassDock> with TickerProviderStateMixin {
   double _lastX = 0;
   Duration _lastTime = Duration.zero;
   int? _pointer;
-  final Map<Object, int> _iconActivations = {};
   Timer? _restTimer;
   bool _dragging = false;
   bool _reduceMotion = false;
@@ -114,9 +92,7 @@ class _GlassDockState extends State<GlassDock> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _slots = [
-      for (final item in widget.items) _DockSlot(item, widget.itemWidth, true),
-    ];
+    _slots = [for (final item in widget.items) _DockSlot(item, 184 / 3, true)];
   }
 
   @override
@@ -151,8 +127,8 @@ class _GlassDockState extends State<GlassDock> with TickerProviderStateMixin {
       final progress = NovelMotion.ease.transform(_membership.value);
       _slots = [
         for (final slot in _slots)
-          if (slot.width(progress, widget.itemWidth) > .001)
-            _DockSlot(slot.item, slot.width(progress, widget.itemWidth), false),
+          if (slot.width(progress) > .001)
+            _DockSlot(slot.item, slot.width(progress), false),
       ];
       for (var index = 0; index < widget.items.length; index++) {
         final item = widget.items[index];
@@ -208,10 +184,8 @@ class _GlassDockState extends State<GlassDock> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  double _fingerPosition(double x) => ((x - _edge) / _segmentWidth - .5).clamp(
-    0.0,
-    (widget.items.length - 1).toDouble(),
-  );
+  double _fingerPosition(double x) =>
+      (x / _segmentWidth - .5).clamp(0.0, (widget.items.length - 1).toDouble());
 
   Future<void> _spring(
     AnimationController controller,
@@ -313,20 +287,9 @@ class _GlassDockState extends State<GlassDock> with TickerProviderStateMixin {
       return;
     }
     _dragging = false;
-    AppHaptics.play(context, widget.items[index].haptic);
-    setState(() {
-      final identity = widget.items[index].identity;
-      _iconActivations[identity] = (_iconActivations[identity] ?? 0) + 1;
-    });
     _release();
     _settlePosition(index, velocity: velocity);
-    if (!fromDrag &&
-        index == widget.selectedIndex &&
-        widget.onReselected != null) {
-      widget.onReselected!(index);
-    } else {
-      widget.onSelected(index);
-    }
+    widget.onSelected(index);
   }
 
   void _dragEnd(DragEndDetails details) {
@@ -355,19 +318,14 @@ class _GlassDockState extends State<GlassDock> with TickerProviderStateMixin {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: _motion,
     builder: (context, child) {
-      final compact = DockLayout.compactOf(context);
-      final height = DockLayout.heightOf(context);
       final progress = NovelMotion.ease.transform(_membership.value);
       final width = _membership.isCompleted
-          ? widget.items.length * widget.itemWidth + _edge * 2
-          : _slots.fold<double>(
-              _edge * 2,
-              (sum, slot) => sum + slot.width(progress, widget.itemWidth),
-            );
+          ? widget.items.length * (184 / 3) + 12
+          : _slots.fold<double>(12, (sum, slot) => sum + slot.width(progress));
       final pressure = _reduceMotion ? 0.0 : _press.value.clamp(0.0, 1.0);
       final flow = _reduceMotion ? 0.0 : _stretch.value;
       return SizedBox(
-        height: height,
+        height: 54,
         width: width,
         child: Transform.translate(
           offset: Offset(flow * .16, -pressure * .6),
@@ -382,7 +340,7 @@ class _GlassDockState extends State<GlassDock> with TickerProviderStateMixin {
                   child: IgnorePointer(
                     child: LiquidGlass(
                       key: const ValueKey('dock-fluid-surface'),
-                      radius: height / 2,
+                      radius: 27,
                       thickness: 16 + pressure * 2,
                       activation: pressure,
                       touchPosition:
@@ -399,52 +357,49 @@ class _GlassDockState extends State<GlassDock> with TickerProviderStateMixin {
                 ),
                 Positioned.fill(
                   child: GlassForeground(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        _segmentWidth =
-                            (constraints.maxWidth - _edge * 2) /
-                            widget.items.length;
-                        return IgnorePointer(
-                          ignoring: _membership.isAnimating,
-                          child: Listener(
-                            onPointerDown: _down,
-                            onPointerUp: (event) {
-                              if (event.pointer == _pointer) _release();
-                            },
-                            onPointerCancel: (event) {
-                              if (event.pointer == _pointer) {
-                                _pointerCancelled = true;
-                                _cancel();
-                              }
-                            },
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTapUp: (details) {
-                                if (!_dragging && !_pointerCancelled) {
-                                  _commit(
-                                    _fingerPosition(
-                                      details.localPosition.dx,
-                                    ).round().clamp(0, widget.items.length - 1),
-                                  );
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          _segmentWidth =
+                              constraints.maxWidth / widget.items.length;
+                          return IgnorePointer(
+                            ignoring: _membership.isAnimating,
+                            child: Listener(
+                              onPointerDown: _down,
+                              onPointerUp: (event) {
+                                if (event.pointer == _pointer) _release();
+                              },
+                              onPointerCancel: (event) {
+                                if (event.pointer == _pointer) {
+                                  _pointerCancelled = true;
+                                  _cancel();
                                 }
                               },
-                              onHorizontalDragStart: _dragStart,
-                              onHorizontalDragUpdate: _dragUpdate,
-                              onHorizontalDragEnd: _dragEnd,
-                              onHorizontalDragCancel: _cancel,
-                              // Input spans the visible capsule, including
-                              // its padded rim; labels retain their gutter.
-                              child: Padding(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: _edge,
-                                  vertical: compact ? 0 : 3,
-                                ),
-                                child: _foreground(progress, compact: compact),
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTapUp: (details) {
+                                  if (!_dragging && !_pointerCancelled) {
+                                    _commit(
+                                      _fingerPosition(details.localPosition.dx)
+                                          .round()
+                                          .clamp(0, widget.items.length - 1),
+                                    );
+                                  }
+                                },
+                                onHorizontalDragStart: _dragStart,
+                                onHorizontalDragUpdate: _dragUpdate,
+                                onHorizontalDragEnd: _dragEnd,
+                                onHorizontalDragCancel: _cancel,
+                                child: _foreground(progress),
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ),
@@ -456,11 +411,11 @@ class _GlassDockState extends State<GlassDock> with TickerProviderStateMixin {
     },
   );
 
-  Widget _foreground(double progress, {required bool compact}) {
+  Widget _foreground(double progress) {
     var left = 0.0;
     final children = <Widget>[];
     for (final slot in _slots) {
-      final width = slot.width(progress, widget.itemWidth);
+      final width = slot.width(progress);
       if (width <= .001) continue;
       children.add(
         Positioned(
@@ -470,13 +425,11 @@ class _GlassDockState extends State<GlassDock> with TickerProviderStateMixin {
           bottom: 0,
           width: width,
           child: ClipRect(
-            clipBehavior: width >= widget.itemWidth - .001
-                ? Clip.none
-                : Clip.hardEdge,
+            clipBehavior: width >= 184 / 3 - .001 ? Clip.none : Clip.hardEdge,
             child: OverflowBox(
               alignment: Alignment.centerRight,
-              minWidth: widget.itemWidth,
-              maxWidth: widget.itemWidth,
+              minWidth: 184 / 3,
+              maxWidth: 184 / 3,
               child: ExcludeSemantics(
                 excluding: !slot.present,
                 child: _nav(
@@ -484,7 +437,6 @@ class _GlassDockState extends State<GlassDock> with TickerProviderStateMixin {
                     (item) => item.identity == slot.item.identity,
                   ),
                   slot.item,
-                  compact: compact,
                 ),
               ),
             ),
@@ -496,44 +448,14 @@ class _GlassDockState extends State<GlassDock> with TickerProviderStateMixin {
     return Stack(clipBehavior: Clip.none, children: children);
   }
 
-  Widget _nav(int index, GlassDockItem item, {required bool compact}) {
+  Widget _nav(int index, GlassDockItem item) {
     final proximity = (1 - (_position.value - index).abs()).clamp(0.0, 1.0);
     final scheme = Theme.of(context).colorScheme;
     final color = !item.enabled && index != widget.selectedIndex
         ? scheme.onSurfaceVariant.withValues(alpha: .4)
         : Color.lerp(scheme.onSurfaceVariant, scheme.primary, proximity);
-    final icon = ArchiveIconContact(
-      pressed:
-          _pointer != null &&
-          index >= 0 &&
-          item.enabled &&
-          _fingerPosition(_lastX).round() == index,
-      activation: _iconActivations[item.identity] ?? 0,
-      child: ArchiveIcon(
-        item.icon,
-        symbol: item.symbol,
-        size: compact ? 18 : DockLayout.iconSize,
-        color: color,
-        active: widget.selectedIndex == index,
-        animate:
-            !widget.reduceMotion &&
-            !PerformanceScope.reduceMotionOf(context) &&
-            (widget.animateInactiveIcons || widget.selectedIndex == index),
-      ),
-    );
-    final label = AppText(
-      item.label,
-      maxLines: 1,
-      style: TextStyle(
-        color: color,
-        fontSize: DockLayout.labelFontSize,
-        fontWeight: widget.selectedIndex == index
-            ? FontWeight.w700
-            : FontWeight.w500,
-      ),
-    );
     return SizedBox(
-      width: widget.itemWidth,
+      width: 184 / 3,
       child: Semantics(
         key: ValueKey(
           index < 0 ? 'dock-outgoing-${item.identity}' : 'dock-tab-$index',
@@ -550,24 +472,24 @@ class _GlassDockState extends State<GlassDock> with TickerProviderStateMixin {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (compact)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        icon,
-                        const SizedBox(width: 5),
-                        Flexible(
-                          child: FittedBox(fit: BoxFit.scaleDown, child: label),
+                  Icon(item.icon, size: 20, color: color),
+                  const SizedBox(height: 3),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: AppText(
+                        item.label,
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 11,
+                          fontWeight: widget.selectedIndex == index
+                              ? FontWeight.w700
+                              : FontWeight.w500,
                         ),
-                      ],
-                    )
-                  else ...[
-                    icon,
-                    const SizedBox(height: 3),
-                    Flexible(
-                      child: FittedBox(fit: BoxFit.scaleDown, child: label),
+                      ),
                     ),
-                  ],
+                  ),
                   const SizedBox(height: 3),
                   ExcludeSemantics(
                     child: SizedBox(

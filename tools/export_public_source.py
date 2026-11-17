@@ -1,40 +1,81 @@
 #!/usr/bin/env python3
-"""Export the reviewed public inventory without local development material."""
+"""Export the Flutter project without local QA data or historical Android builds."""
 import argparse
-import importlib.util
 from pathlib import Path
 import shutil
 
 ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location('public_policy', ROOT / 'tools/check_public_source.py')
-policy = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(policy)
+FILES = (
+    "README.md", "LICENSE", "NOTICE", ".gitignore", "pubspec.yaml", "pubspec.lock",
+    "analysis_options.yaml", ".github/workflows/flutter-ci.yml", ".github/workflows/android-release.yml",
+    "tools/export_public_source.py", "tools/test_public_source_export.py", "tools/generate_app_icons.dart",
+    "docs/RELEASING.md", "docs/THIRD_PARTY.md", "docs/READER.md", "docs/CLOUD_IMPORT.md", "docs/SEARCH.md",
+    "CHANGELOG.md", "tools/prepare_release.py", "tools/test_prepare_release.py",
+    "tools/check_public_source.py", "tools/test_public_source_policy.py",
+    "tools/verify_apk_runtime.py", "tools/test_verify_apk_runtime.py",
+    "tools/provision_api_runtime.py", "tools/test_provision_api_runtime.py",
+    "tools/create_update_fixtures.py",
+)
+DIRECTORIES = ("lib", "assets", "shaders", "test", "integration_test", "android", "ios", "docs/images", "third_party/liquid_glass_easy", "third_party/libmobi", "tools/update-mirror", "tools/content-gateway")
+PRIVATE_NAMES = {
+    "local.properties", "key.properties", "GeneratedPluginRegistrant.java",
+    "Generated.xcconfig", "flutter_export_environment.sh", ".DS_Store",
+    ".last_build_id", "ephemeral", "Flutter.podspec", "flutter_export_environment.sh",
+}
+SKIP_DIRS = {"build", ".gradle", ".cxx", ".wrangler", "node_modules", "Pods", ".symlinks", "__pycache__", ".git",
+             "xcuserdata", "ephemeral", ".idea", ".dart_tool", "App.framework", "Flutter.framework"}
+DEVELOPMENT_ENTRIES = {
+    "lib/performance_page.dart", "lib/ui_performance.dart",
+    "lib/expansion_probe.dart", "lib/render_budget_probe.dart",
+    "integration_test/performance_capture_test.dart",
+    "test/ui_frame_capture_test.dart",
+}
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('output', type=Path)
-    parser.add_argument('--source-only', action='store_true', help='Compatibility alias; every export is source-only')
+    parser.add_argument("output", type=Path, help="New, empty output folder")
+    parser.add_argument("--source-only", action="store_true",
+                        help="Legacy alias: public exports always omit the private API runtime")
     args = parser.parse_args()
     destination = args.output.resolve()
     if destination == ROOT or ROOT.is_relative_to(destination) or destination.is_relative_to(ROOT):
-        parser.error('Choose an empty destination outside the source tree')
+        parser.error("Choose a separate empty folder outside the project and its parent folders")
     if destination.exists() and any(destination.iterdir()):
-        parser.error('Destination must be empty; existing files are never removed')
-    names = (ROOT / 'tools/public-source-files.txt').read_text().splitlines()
-    if len(names) != len(set(names)) or any(Path(n).is_absolute() or '..' in Path(n).parts for n in names):
-        parser.error('Invalid source inventory')
-    files = [ROOT / name for name in names]
-    if any(not file.is_file() or file.is_symlink() for file in files):
-        parser.error('Source inventory contains a missing file or symbolic link')
-    issues = policy.inspect(ROOT, files, require_manifest=True)
-    if issues:
-        parser.error('Public source boundary failed:\n' + '\n'.join(issues))
+        parser.error("The output folder must be empty; existing files are never removed")
     destination.mkdir(parents=True, exist_ok=True)
-    for source in files:
-        target = destination / source.relative_to(ROOT)
+    copied = 0
+
+    def copy(relative):
+        nonlocal copied
+        source = ROOT / relative
+        if source.is_symlink() or not source.is_file():
+            return
+        if any(part in SKIP_DIRS for part in relative.parts):
+            return
+        if relative.parts[:3] == ("tools", "update-mirror", "public"):
+            return
+        if source.name.startswith((".env", ".dev.vars")):
+            return
+        if source.name in PRIVATE_NAMES or source.suffix in {".iml", ".jks", ".keystore", ".apk", ".aab", ".log", ".pyc", ".p12", ".pem", ".key", ".mobileprovision", ".xcuserstate"}:
+            return
+        if relative.as_posix() in DEVELOPMENT_ENTRIES:
+            return
+        if source.name.lower() == "libcpp.so":
+            return
+        target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
-    print(f'Exported {len(files)} reviewed source files to {destination}')
+        copied += 1
 
-if __name__ == '__main__':
+    for name in FILES:
+        copy(Path(name))
+    for directory in DIRECTORIES:
+        for source in sorted((ROOT / directory).rglob("*")):
+            copy(source.relative_to(ROOT))
+    print(f"Exported {copied} source files to {destination}")
+    print("Private API runtime excluded. Official APK builds supply it separately; see docs/RELEASING.md.")
+
+
+if __name__ == "__main__":
     main()

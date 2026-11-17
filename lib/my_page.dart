@@ -4,9 +4,7 @@ import 'package:flutter/material.dart';
 import 'app_interactions.dart';
 import 'app_ui.dart';
 import 'bookmark_library_page.dart';
-import 'reading_statistics_page.dart';
 import 'catalog.dart';
-import 'dock_layout.dart';
 import 'feature_pages.dart';
 import 'library_state.dart';
 import 'legado_book_sources.dart';
@@ -49,8 +47,9 @@ class MyPage extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 760),
           child: ListView(
             key: const PageStorageKey('my-page'),
-            padding: featurePadding(context)
-                .copyWith(bottom: DockLayout.scrollPaddingOf(context)),
+            padding: featurePadding(
+              context,
+            ).copyWith(bottom: MediaQuery.paddingOf(context).bottom + 120),
             children: [
               AnimatedBuilder(
                 animation: Listenable.merge([
@@ -82,7 +81,7 @@ class MyPage extends StatelessWidget {
                                   width: 56,
                                   height: 56,
                                   child: account?.avatar == null
-                                      ? const ArchiveIcon(
+                                      ? const Icon(
                                           CupertinoIcons.person_crop_circle,
                                           size: 40,
                                         )
@@ -95,12 +94,10 @@ class MyPage extends StatelessWidget {
                                                         context,
                                                       ))
                                                   .ceil(),
-                                          errorBuilder: (_, _, _) =>
-                                              const ArchiveIcon(
-                                                CupertinoIcons
-                                                    .person_crop_circle,
-                                                size: 40,
-                                              ),
+                                          errorBuilder: (_, _, _) => const Icon(
+                                            CupertinoIcons.person_crop_circle,
+                                            size: 40,
+                                          ),
                                         ),
                                 )
                               : Image.asset(
@@ -153,19 +150,16 @@ class MyPage extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 12,
                                   height: 1.6,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                                 ),
                               ),
                             ],
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const ArchiveIcon(
-                          CupertinoIcons.chevron_right,
-                          size: 14,
-                        ),
+                        const Icon(CupertinoIcons.chevron_right, size: 14),
                       ],
                     ),
                   );
@@ -176,12 +170,11 @@ class MyPage extends StatelessWidget {
                 AnimatedBuilder(
                   animation: sourceStore,
                   builder: (context, _) => FeatureEntry(
-                    key: const ValueKey('my-reading-book-sources'),
+                    key: const ValueKey('my-legado-book-sources'),
                     title: '阅读书源',
                     subtitle: sourceStore.sources.isEmpty
                         ? '导入和管理书源配置'
-                        : sourceStore.sources.length.toString() +
-                              ' 个书源 · 导入、管理并搜索',
+                        : '${sourceStore.sources.length} 个书源 · 导入和管理',
                     icon: CupertinoIcons.book,
                     onTap: () => pushNovelPage<void>(
                       context,
@@ -199,18 +192,6 @@ class MyPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
               ],
-              FeatureEntry(
-                key: const ValueKey('my-statistics'),
-                title: '统计',
-                subtitle: '阅读记录、藏书与书签',
-                icon: CupertinoIcons.chart_bar,
-                onTap: () => pushNovelPage<void>(
-                  context,
-                  ReadingStatisticsPage(state: state, repository: repository),
-                  reduceMotion: state.reduceMotion,
-                ),
-              ),
-              const SizedBox(height: 14),
               ActiveListenableBuilder(
                 listenable: state.bookmarkChanges,
                 builder: (context) {

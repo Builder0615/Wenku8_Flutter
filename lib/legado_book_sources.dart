@@ -180,20 +180,6 @@ class LegadoBookSourceStore extends ChangeNotifier {
     await _save(List.unmodifiable(next));
   }
 
-  Future<void> setEnabled(String url, bool enabled) async {
-    final next = [
-      for (final source in _sources)
-        if (source.url == url)
-          LegadoBookSource(
-            Map.unmodifiable({...source.record, 'enabled': enabled}),
-          )
-        else
-          source,
-    ];
-    if (!_sources.any((source) => source.url == url)) return;
-    await _save(List.unmodifiable(next));
-  }
-
   Future<void> _save(List<LegadoBookSource> next) async {
     final file = await _file();
     final text = jsonEncode([for (final source in next) source.record]);
@@ -340,8 +326,9 @@ class _LegadoBookSourcesPageState extends State<LegadoBookSourcesPage> {
               height: 1.5,
             ),
             decoration: BoxDecoration(
-              color: Theme.of(sheet).colorScheme.onSurface
-                  .withValues(alpha: .045),
+              color: Theme.of(
+                sheet,
+              ).colorScheme.onSurface.withValues(alpha: .045),
               borderRadius: BorderRadius.circular(ArchiveDesign.panelRadius),
             ),
           ),
@@ -544,18 +531,6 @@ class _LegadoBookSourcesPageState extends State<LegadoBookSourcesPage> {
             ),
           ),
           const SizedBox(width: 8),
-          CupertinoSwitch(
-            value: source.enabled,
-            onChanged: _busy
-                ? null
-                : (enabled) async {
-                    try {
-                      await widget.store.setEnabled(source.url, enabled);
-                    } catch (_) {
-                      if (mounted) showNovelFeedback(context, '书源状态保存失败');
-                    }
-                  },
-          ),
           IconButton(
             tooltip: '移除 ${source.name}',
             onPressed: _busy ? null : () => _remove(source),
@@ -591,7 +566,7 @@ class _LegadoBookSourcesPageState extends State<LegadoBookSourcesPage> {
                       sectionHeader(context, '阅读书源', '${sources.length} 个'),
                       const SizedBox(height: 10),
                       const AppText(
-                        '支持 Legado 格式 JSON 单条/数组、文件和直链。已启用书源会参与发现页搜索；支持常见 GET/POST、网页选择器和基础 JSONPath 规则，搜索结果可打开书源网页。书源配置保存在本机。',
+                        '支持 Legado 格式 JSON、文件、直链与 AOAOSTAR 目录。已启用书源会参与发现页搜索；支持常见 GET/POST、网页选择器和基础 JSONPath，结果可打开来源网页。书源配置保存在本机。',
                       ),
                       const SizedBox(height: 14),
                       Wrap(

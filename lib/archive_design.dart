@@ -59,22 +59,19 @@ class ArchiveMasthead extends StatelessWidget {
       children: [
         if (brand) ...[
           ExcludeSemantics(
-            child: SizedBox(
+            child: Container(
               width: 30,
               height: 34,
-              child: Center(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(5),
-                  child: Image.asset(
-                    'assets/branding/app-icon.png',
-                    key: const ValueKey('discovery-app-icon'),
-                    width: 30,
-                    height: 30,
-                    fit: BoxFit.contain,
-                    cacheWidth: (30 * MediaQuery.devicePixelRatioOf(context))
-                        .ceil(),
-                    excludeFromSemantics: true,
-                  ),
+              alignment: Alignment.center,
+              color: Theme.of(context).colorScheme.onSurface,
+              child: AppText(
+                'W8',
+                textScaler: TextScaler.noScaling,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.surface,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  letterSpacing: -.7,
                 ),
               ),
             ),
@@ -318,8 +315,7 @@ class _RegistrationPainter extends CustomPainter {
 
 /// The diagram is limited to the header margin. The reading canvas stays plain.
 class ArchiveBackdrop extends StatelessWidget {
-  const ArchiveBackdrop({super.key, this.filmColor = ArchiveDesign.milk});
-  final Color filmColor;
+  const ArchiveBackdrop({super.key});
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
@@ -335,7 +331,6 @@ class ArchiveBackdrop extends StatelessWidget {
             child: CustomPaint(
               painter: _ArchiveBackdropPainter(
                 color: Theme.of(context).colorScheme.onSurface,
-                filmColor: filmColor,
                 top: MediaQuery.viewPaddingOf(context).top,
               ),
               child: const SizedBox.expand(),
@@ -348,13 +343,8 @@ class ArchiveBackdrop extends StatelessWidget {
 }
 
 class _ArchiveBackdropPainter extends CustomPainter {
-  const _ArchiveBackdropPainter({
-    required this.color,
-    required this.top,
-    required this.filmColor,
-  });
+  const _ArchiveBackdropPainter({required this.color, required this.top});
   final Color color;
-  final Color filmColor;
   final double top;
 
   @override
@@ -362,7 +352,7 @@ class _ArchiveBackdropPainter extends CustomPainter {
     final bottom = math.min(size.height, top + 240);
     final dark = color.computeLuminance() > .5;
     final film = Paint()
-      ..color = filmColor.withValues(alpha: dark ? .018 : .42);
+      ..color = ArchiveDesign.milk.withValues(alpha: dark ? .018 : .42);
     // Two restrained frosted file planes in the existing small header raster.
     // They are paint geometry: no backdrop filter, full-screen layer or ticker.
     canvas.drawPath(
@@ -374,7 +364,7 @@ class _ArchiveBackdropPainter extends CustomPainter {
         ..close(),
       film,
     );
-    film.color = filmColor.withValues(alpha: dark ? .012 : .28);
+    film.color = ArchiveDesign.milk.withValues(alpha: dark ? .012 : .28);
     canvas.drawPath(
       Path()
         ..moveTo(size.width * .60, top + 18)
@@ -403,7 +393,5 @@ class _ArchiveBackdropPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ArchiveBackdropPainter oldDelegate) =>
-      color != oldDelegate.color ||
-      top != oldDelegate.top ||
-      filmColor != oldDelegate.filmColor;
+      color != oldDelegate.color || top != oldDelegate.top;
 }

@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 
 enum NetworkReachability { unknown, online, offline }
 
-/// Host network callbacks, not periodic HTTP probes. Brief network
+/// Android's default-network callbacks, not periodic HTTP probes. Brief network
 /// handovers keep the current UI rather than hiding/showing tabs repeatedly.
 class NetworkStatus extends ValueNotifier<NetworkReachability> {
   NetworkStatus({NetworkReachability initial = NetworkReachability.unknown})
@@ -24,9 +24,7 @@ class NetworkStatus extends ValueNotifier<NetworkReachability> {
     if (_disposed ||
         _subscription != null ||
         kIsWeb ||
-        (defaultTargetPlatform != TargetPlatform.android &&
-            defaultTargetPlatform != TargetPlatform.iOS &&
-            defaultTargetPlatform.name != 'ohos')) {
+        defaultTargetPlatform != TargetPlatform.android) {
       return;
     }
     _subscription = events.receiveBroadcastStream().listen(

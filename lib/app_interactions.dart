@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 
 import 'app_ui.dart';
-import 'route_identity.dart';
 
 final _routeSlots = Expando<Set<Object>>('novel-route-slots');
 final _explorationOwners = Expando<_ExplorationHistory>('novel-exploration');
@@ -62,7 +61,7 @@ Future<T?> pushNovelPage<T>(
 }) async {
   if (!context.mounted) return null;
   final navigator = Navigator.of(context);
-  final origin = RouteIdentity.read(context);
+  final origin = ModalRoute.of(context);
   final history = explorationKey == null
       ? null
       : (origin == null ? null : _explorationOwners[origin]) ??
@@ -132,14 +131,10 @@ VoidCallback? showNovelFeedback(
   FutureOr<void> Function()? action,
   String actionFailure = '操作保存失败，请重试',
   ValueListenable<double>? headerVisibility,
-  Duration? duration,
-  HapticCue? haptic,
-  bool reduceMotion = false,
 }) {
   if (!context.mounted) return null;
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return null;
-  AppHaptics.play(context, haptic);
   _feedbackEntries[overlay]?.close();
   final sourceRoute = ModalRoute.of(context);
   final header =
@@ -166,8 +161,6 @@ VoidCallback? showNovelFeedback(
         opacity: appearance.opacity,
         child: NovelFeedbackNotice(
           message: message,
-          reduceMotion: reduceMotion,
-          duration: duration,
           headerVisibility: header,
           actionLabel: actionLabel,
           onAction: action == null || actionLabel == null
@@ -178,12 +171,7 @@ VoidCallback? showNovelFeedback(
                     await action();
                   } catch (_) {
                     if (context.mounted) {
-                      showNovelFeedback(
-                        context,
-                        actionFailure,
-                        haptic: HapticCue.error,
-                        reduceMotion: reduceMotion,
-                      );
+                      showNovelFeedback(context, actionFailure);
                     }
                   }
                 },
@@ -205,16 +193,12 @@ class NovelFeedbackNotice extends StatefulWidget {
     this.actionLabel,
     this.onAction,
     this.headerVisibility,
-    this.duration,
-    this.reduceMotion = false,
   });
   final String message;
   final String? actionLabel;
   final VoidCallback onDismiss;
   final Future<void> Function()? onAction;
   final ValueListenable<double>? headerVisibility;
-  final Duration? duration;
-  final bool reduceMotion;
   @override
   State<NovelFeedbackNotice> createState() => _NovelFeedbackNoticeState();
 }
@@ -228,25 +212,21 @@ class _NovelFeedbackNoticeState extends State<NovelFeedbackNotice>
   );
   Timer? _timer;
   bool _started = false, _closing = false;
-  bool get _reduceMotion =>
-      widget.reduceMotion || MediaQuery.disableAnimationsOf(context);
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_started) return;
     _started = true;
-    if (_reduceMotion) {
+    if (MediaQuery.disableAnimationsOf(context)) {
       _motion.value = 1;
     } else {
       _motion.forward();
     }
     // Notices are transient even with a screen reader. Give long copy and
     // actions more reading time, but never require a separate close control.
-    final milliseconds =
-        widget.duration?.inMilliseconds ??
-        (widget.onAction == null
-            ? (480 + widget.message.runes.length * 28).clamp(900, 2200)
-            : (widget.message.runes.length / 18).ceil().clamp(4, 7) * 1000);
+    final milliseconds = widget.onAction == null
+        ? (480 + widget.message.runes.length * 28).clamp(900, 2200)
+        : (widget.message.runes.length / 18).ceil().clamp(4, 7) * 1000;
     _timer = Timer(
       Duration(
         milliseconds: MediaQuery.accessibleNavigationOf(context)
@@ -261,7 +241,7 @@ class _NovelFeedbackNoticeState extends State<NovelFeedbackNotice>
     if (_closing) return;
     _closing = true;
     _timer?.cancel();
-    if (!_reduceMotion) {
+    if (!MediaQuery.disableAnimationsOf(context)) {
       try {
         await _motion.reverse().orCancel;
       } on TickerCanceled {

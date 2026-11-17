@@ -107,10 +107,9 @@ fabric.properties
 *.pyc
 
 # Machine paths and signing credentials
-# Online implementation files and binaries are outside the public project.
+# API implementation stays private, matching the upstream public source boundary.
 /android/app/src/main/jniLibs/**/libcpp.so
-/android/app/src/main/java/org/mewx/wenku8/api/
-/tools/content-gateway/
+!android/app/src/main/jniLibs/arm64-v8a/libcpp.so
 key.properties
 *.keystore
 *.jks
@@ -126,48 +125,22 @@ key.properties
 !/tools/export_public_source.py
 !/tools/test_public_source_export.py
 !/tools/generate_app_icons.dart
-!/tools/icon_studio.dart
-!/tools/export_icon_studio.dart
 !/tools/prepare_release.py
-!/tools/sign_distribution.py
 !/tools/test_prepare_release.py
 !/tools/check_public_source.py
-!/tools/build_project_site.py
-!/tools/fetch_activity_snapshot.py
 !/tools/test_public_source_policy.py
-!/tools/public-source-files.txt
+!/tools/verify_apk_runtime.py
+!/tools/test_verify_apk_runtime.py
+!/tools/provision_api_runtime.py
+!/tools/test_provision_api_runtime.py
 !/tools/create_update_fixtures.py
 !/tools/update-mirror/
+!/tools/content-gateway/
 
 # Cloudflare local build cache and local-only secrets
 .wrangler/
 /tools/update-mirror/.dev.vars*
 /tools/update-mirror/.env*
 /tools/update-mirror/public/
-
-# Tests and device acceptance material remain in the private development tree.
-/test/
-/integration_test/
-/test_driver/
-/android/app/src/test/
-/android/app/src/androidTest/
-/ios/*Tests/
-/third_party/libmobi/tests/
-/third_party/juniversalchardet-2.0.4/src/test/
-/ohos/oh_modules/
-/ohos/entry/oh_modules/
-/ohos/.hvigor/
-/ohos/entry/build/
-/ohos/entry/src/main/ets/plugins/GeneratedPluginRegistrant.ets
-/ohos/**/oh-package-lock.json5
-*.hap
-*.hsp
-*.har
-*.p7b
-*.cer
-*.csr
-*.so
-!android/app/src/main/jniLibs/arm64-v8a/libcpp.so
-!android/gradlew
-!android/gradlew.bat
-!android/gradle/wrapper/gradle-wrapper.jar
+/tools/content-gateway/.dev.vars*
+/tools/content-gateway/.env*

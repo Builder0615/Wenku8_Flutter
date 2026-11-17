@@ -5,13 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../app_interactions.dart';
 import '../app_ui.dart';
-import '../archive_progress.dart';
 import 'app_updates.dart';
 import 'release_highlights.dart';
-import 'release_markdown.dart';
-import 'release_notices.dart';
-
-export 'release_markdown.dart' show ReleaseNotes;
 
 class AppUpdatesScope extends InheritedNotifier<AppUpdates> {
   const AppUpdatesScope({
@@ -37,9 +32,6 @@ class AppUpdateNavigation extends NavigatorObserver with ChangeNotifier {
       !_gesture &&
       (_enter == null || _enter!.status == AnimationStatus.completed) &&
       (_leave == null || _leave!.status == AnimationStatus.dismissed);
-
-  bool get rootReady => ready && _top!.isFirst;
-  bool get hasPageBeyondRoot => _top is PageRoute && !_top!.isFirst;
 
   void _animationChanged(AnimationStatus _) => notifyListeners();
 
@@ -84,12 +76,10 @@ class AppUpdateMonitor extends StatefulWidget {
     required this.updates,
     required this.child,
     this.navigation,
-    this.promptsEnabled = true,
   });
   final AppUpdates updates;
   final Widget child;
   final AppUpdateNavigation? navigation;
-  final bool promptsEnabled;
   @override
   State<AppUpdateMonitor> createState() => _AppUpdateMonitorState();
 }
@@ -138,8 +128,7 @@ class _AppUpdateMonitorState extends State<AppUpdateMonitor>
     final service = widget.updates;
     final lifecycle = WidgetsBinding.instance.lifecycleState;
     final navigation = widget.navigation;
-    if (!widget.promptsEnabled ||
-        _promptOpen ||
+    if (_promptOpen ||
         lifecycle != null && lifecycle != AppLifecycleState.resumed ||
         navigation?.ready != true) {
       return;
@@ -216,7 +205,6 @@ class _AppUpdateMonitorState extends State<AppUpdateMonitor>
 
   void _schedule() {
     _timer?.cancel();
-    if (!widget.updates.checksEnabled) return;
     // Check once for each foreground session, after the first screen settles.
     // Transient inactive states (notification shade, system dialogs) are not a
     // new launch. A background return is, regardless of the last check's age.
@@ -266,8 +254,7 @@ class _AppUpdateMonitorState extends State<AppUpdateMonitor>
       AppUpdatesScope(updates: widget.updates, child: widget.child);
 }
 
-class _AppUpdatePromptRoute extends PopupRoute<bool>
-    with AppHapticModalBarrier<bool> {
+class _AppUpdatePromptRoute extends PopupRoute<bool> {
   _AppUpdatePromptRoute({
     required this.release,
     required this.canDownload,
@@ -329,10 +316,9 @@ class _AppUpdatePromptRoute extends PopupRoute<bool>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const ArchiveIcon(
+                                const Icon(
                                   CupertinoIcons.arrow_up_circle,
                                   size: 28,
-                                  ambient: true,
                                 ),
                                 const SizedBox(height: 16),
                                 const AppText(
@@ -356,7 +342,6 @@ class _AppUpdatePromptRoute extends PopupRoute<bool>
                                   release.notes.trim().isEmpty
                                       ? '新版本已准备好，可以下载更新。'
                                       : release.notes,
-                                  baseUri: release.page,
                                 ),
                                 const SizedBox(height: 8),
                                 AppText(
@@ -451,7 +436,7 @@ class AppUpdatePage extends StatelessWidget {
           header: ArchiveHeaderBar(
             leading: GlassIconButton(
               icon: CupertinoIcons.back,
-              label: '返回',
+              label: '返回设置',
               onPressed: () => Navigator.pop(context),
             ),
             title: const ArchiveRouteTitle(
@@ -478,7 +463,7 @@ class AppUpdatePage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              if (service != null && service.checksEnabled) ...[
+              if (service != null) ...[
                 ContentPanel(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -510,9 +495,7 @@ class AppUpdatePage extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       AppText(
-                        service.packageUpdates
-                            ? '每次打开应用时检查新版本，下载与安装由你确认。'
-                            : '每次打开应用时检查对应平台的新版本，下载后需自行签名安装。',
+                        '每次打开应用时检查新版本，下载与安装由你确认。',
                         style: TextStyle(
                           fontSize: 13,
                           height: 1.5,
@@ -529,7 +512,7 @@ class AppUpdatePage extends StatelessWidget {
                         const SizedBox(height: 12),
                         const SizedBox(
                           height: 16,
-                          child: RefreshProgress(label: '正在检查版本'),
+                          child: LoadingSkeleton(layout: SkeletonLayout.inline),
                         ),
                       ] else if (service.checked && !available) ...[
                         const SizedBox(height: 12),
@@ -578,15 +561,72 @@ class AppUpdatePage extends StatelessWidget {
                           service.release!.notes.isEmpty
                               ? '此版本未提供更新说明。'
                               : service.release!.notes,
-                          baseUri: service.release!.page,
                         ),
                         const SizedBox(height: 16),
-                        if (service.asset != null)
-                          _UpdateTransferAction(service: service)
-                        else if (service.packageUpdates)
+                        if (service.downloading) ...[
+                          AppText(
+                            '已下载 ${(service.bytes / 1024 / 1024).toStringAsFixed(1)} / ${(service.asset!.size / 1024 / 1024).toStringAsFixed(1)} MB',
+                          ),
+                          const SizedBox(height: 8),
+                          LinearProgressIndicator(
+                            value: (service.bytes / service.asset!.size).clamp(
+                              0.0,
+                              1.0,
+                            ),
+                            color: Theme.of(context).colorScheme.primary,
+                            minHeight: 2,
+                          ),
+                          GlassTextButton(
+                            onPressed: service.cancelDownload,
+                            child: const AppText('取消下载'),
+                          ),
+                        ] else if (service.downloaded != null) ...[
+                          AppText(
+                            '安装包 ${service.downloadedInfo!.version} · 构建 ${service.downloadedInfo!.build}',
+                            key: const ValueKey('downloaded-app-version'),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          if (service.needsPermission)
+                            AppText(
+                              '请允许本应用安装更新，返回后再次点击「安装更新」。',
+                              style: TextStyle(
+                                height: 1.5,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          if (service.needsPermission)
+                            GlassTextButton(
+                              onPressed: () => _open(
+                                context,
+                                service.platform.allowInstalls,
+                              ),
+                              child: const AppText('允许安装更新'),
+                            ),
+                          GlassTextButton(
+                            key: const ValueKey('install-app-update'),
+                            onPressed: service.busy ? null : service.install,
+                            child: AppText(
+                              service.installing ? '正在打开安装程序' : '安装更新',
+                            ),
+                          ),
+                        ] else if (service.asset != null)
+                          GlassTextButton(
+                            key: const ValueKey('download-app-update'),
+                            onPressed: service.busy ? null : service.download,
+                            child: AppText(
+                              '下载更新 · ${(service.asset!.size / 1024 / 1024).toStringAsFixed(1)} MB',
+                            ),
+                          )
+                        else
                           const AppText('此版本暂无适合本机的 APK。'),
-                        if (!service.packageUpdates)
-                          const AppText('请前往发布页下载对应安装包，签名后安装。升级前请备份阅读记录。'),
                         GlassTextButton(
                           onPressed: () => _open(
                             context,
@@ -602,13 +642,6 @@ class AppUpdatePage extends StatelessWidget {
               ],
               CurrentReleaseCard(updates: service),
               const SizedBox(height: 28),
-              const ArchiveSection(title: '重要说明', code: 'READ / BEFORE USE'),
-              const SizedBox(height: 14),
-              const ContentPanel(
-                key: ValueKey('app-important-notices'),
-                child: ReleaseNotes(projectImportantNotices),
-              ),
-              const SizedBox(height: 28),
               const ArchiveSection(title: '项目与许可', code: 'SOURCE / LICENSES'),
               const SizedBox(height: 14),
               ContentPanel(
@@ -616,7 +649,7 @@ class AppUpdatePage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const AppText(
-                      '公开源码遵循仓库许可证；第三方组件、字体及其贡献者的版权与许可分别保留。',
+                      '基于 MewX 与原项目贡献者的轻小说文库 Android 客户端重构。原项目 GPL v2 或后续版本许可保留；本 Flutter 组合版本按 GPL v3 分发。',
                       style: TextStyle(height: 1.6),
                     ),
                     const SizedBox(height: 12),
@@ -626,7 +659,7 @@ class AppUpdatePage extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     const AppText(
-                      '可下载字体遵循 SIL OFL 1.1；在线语音协议适配参考 rany2/edge-tts，遵循 LGPL v3。第三方组件的版权与完整授权分别保留在许可页中。',
+                      '内置字体：Adobe 思源宋体 CN，SIL OFL 1.1。在线语音协议适配：rany2/edge-tts，LGPL v3。接口运行库 libcpp.so 原样保留，其授权独立于本项目源码。',
                       style: TextStyle(height: 1.6),
                     ),
                     GlassTextButton(
@@ -636,19 +669,16 @@ class AppUpdatePage extends StatelessWidget {
                         applicationName: '轻小说文库',
                         applicationVersion: currentAppVersion,
                         applicationLegalese:
-                            'Copyright © 2026 Wenku8 Flutter contributors',
+                            'Copyright © MewX and contributors\nFlutter modifications © 2026 Wenku8 Flutter contributors',
                       ),
                       child: const AppText('开源许可与字体授权'),
                     ),
                     if (service != null) ...[
                       const SizedBox(height: 12),
                       GlassTextButton(
-                        key: const ValueKey('app-project-download'),
                         onPressed: () =>
                             _open(context, () => service.openProjectPage()),
-                        child: AppText(
-                          service.checksEnabled ? '项目介绍与下载' : '项目介绍',
-                        ),
+                        child: const AppText('项目介绍与下载'),
                       ),
                     ],
                   ],
@@ -667,112 +697,35 @@ class AppUpdatePage extends StatelessWidget {
   ) async {
     try {
       await action();
-    } catch (error) {
+    } catch (_) {
       if (context.mounted) showNovelFeedback(context, '暂时无法打开，请稍后重试');
     }
   }
 }
 
-class _UpdateTransferAction extends StatelessWidget {
-  const _UpdateTransferAction({required this.service});
-  final AppUpdates service;
-
+class ReleaseNotes extends StatelessWidget {
+  const ReleaseNotes(this.text, {super.key});
+  final String text;
   @override
-  Widget build(BuildContext context) {
-    final downloaded = service.downloaded != null;
-    final working = service.downloading;
-    final retry = !downloaded && service.error != null;
-    final label = working
-        ? '取消下载'
-        : downloaded
-        ? '安装更新'
-        : retry
-        ? '重试下载'
-        : '下载更新';
-    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    AppText(
-                      working
-                          ? '正在下载更新'
-                          : service.installing
-                          ? '正在打开安装程序'
-                          : label,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    AppText(
-                      downloaded
-                          ? '安装包 ${service.downloadedInfo!.version} · 构建 ${service.downloadedInfo!.build}'
-                          : working
-                          ? '${(service.bytes / 1048576).toStringAsFixed(1)} / ${(service.asset!.size / 1048576).toStringAsFixed(1)} MiB'
-                          : '${(service.asset!.size / 1048576).toStringAsFixed(1)} MiB',
-                      key: downloaded
-                          ? const ValueKey('downloaded-app-version')
-                          : null,
-                      style: TextStyle(fontSize: 12, height: 1.5, color: muted),
-                    ),
-                  ],
-                ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final line in text.trim().split('\n'))
+        if (line.trim().isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: AppText(
+              line
+                  .replaceFirst(RegExp(r'^#{1,6}\s+'), '')
+                  .replaceFirst(RegExp(r'^[-*]\s+'), '· '),
+              style: TextStyle(
+                height: 1.6,
+                fontWeight: line.startsWith('#')
+                    ? FontWeight.w600
+                    : FontWeight.normal,
               ),
-              const SizedBox(width: 12),
-              ArchiveTransferButton(
-                key: const ValueKey('update-package-action'),
-                icon: downloaded
-                    ? CupertinoIcons.arrow_up_circle
-                    : retry
-                    ? CupertinoIcons.arrow_clockwise
-                    : CupertinoIcons.arrow_down_to_line,
-                label: label,
-                working: working,
-                completed: downloaded,
-                value: service.asset!.size > 0
-                    ? service.bytes / service.asset!.size
-                    : null,
-                onPressed: working
-                    ? service.cancelDownload
-                    : service.busy
-                    ? null
-                    : downloaded
-                    ? service.install
-                    : service.download,
-              ),
-            ],
+            ),
           ),
-          if (downloaded && service.needsPermission) ...[
-            const SizedBox(height: 8),
-            AppText(
-              '请允许本应用安装更新，返回后再次点击「安装更新」。',
-              style: TextStyle(fontSize: 13, height: 1.5, color: muted),
-            ),
-            GlassTextButton(
-              onPressed: () async {
-                try {
-                  await service.platform.allowInstalls();
-                } catch (_) {
-                  if (context.mounted) {
-                    showNovelFeedback(context, '暂时无法打开，请稍后重试');
-                  }
-                }
-              },
-              child: const AppText('允许安装更新'),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
+    ],
+  );
 }

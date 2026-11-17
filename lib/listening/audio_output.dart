@@ -6,9 +6,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 
-import '../local_platform.dart';
 import 'controller.dart';
-import 'harmony_audio_output.dart';
 import 'models.dart';
 
 /// Both online MP3 and system-generated WAV use the same hardware audio player.
@@ -29,18 +27,6 @@ class NativeListeningOutput implements ListeningAudioOutput {
   Future<void> initialize() async {
     _session = await AudioSession.instance;
     await _session!.configure(const AudioSessionConfiguration.speech());
-    if (LocalPlatform.android) {
-      _subscriptions.add(
-        _player.androidAudioSessionIdStream.distinct().listen((id) {
-          unawaited(
-            controller.enhancement.configure(
-              controller.enhancement.preference,
-              audioSessionId: id,
-            ),
-          );
-        }),
-      );
-    }
     _subscriptions.add(
       _session!.interruptionEventStream.listen((event) {
         if (event.begin) unawaited(controller.pause());
@@ -84,12 +70,6 @@ class NativeListeningOutput implements ListeningAudioOutput {
   @override
   Future<void> play() async {
     final epoch = ++_playEpoch;
-    // completed is a persistent decoder state, not a fresh event on play().
-    // Forward it explicitly if pause/resume raced its stream notification.
-    if (_player.processingState == ProcessingState.completed) {
-      _completed.add(null);
-      return;
-    }
     final active = _sessionActive || await _session!.setActive(true);
     if (epoch != _playEpoch) return;
     if (!active) {
@@ -132,9 +112,6 @@ class NativeListeningOutput implements ListeningAudioOutput {
     for (final subscription in _subscriptions) {
       await subscription.cancel();
     }
-    if (LocalPlatform.android) {
-      await controller.enhancement.configure(controller.enhancement.preference);
-    }
     await _player.dispose();
     await _completed.close();
   }
@@ -144,16 +121,6 @@ Future<ListeningAudioOutput> createListeningOutput(
   ListeningController controller,
 ) async {
   await prepareListeningService(controller);
-  if (LocalPlatform.harmony) {
-    final output = HarmonyListeningOutput();
-    try {
-      await output.initialize();
-      return output;
-    } catch (_) {
-      await output.dispose();
-      rethrow;
-    }
-  }
   final output = NativeListeningOutput(controller);
   try {
     await output.initialize();
@@ -174,17 +141,6 @@ Future<void> prepareListeningService(ListeningController controller) async {
 const listeningAndroidNotificationIcon = 'drawable/ic_listening_notification';
 
 Future<void> _registerService(ListeningController controller) async {
-  if (LocalPlatform.harmony) {
-    final service = HarmonyListeningService(controller);
-    try {
-      await service.initialize();
-      return;
-    } catch (_) {
-      service.close();
-      _serviceReady = null;
-      rethrow;
-    }
-  }
   final handler = ListeningAudioHandler(controller);
   try {
     await AudioService.init(
@@ -234,13 +190,9 @@ class ListeningAudioHandler extends BaseAudioHandler {
   void _state() {
     final state = controller.snapshot.value;
     final key =
-        '${state.novel?.id}/${state.chapter}/${state.chapterTitle}/${state.voice.engine}/${state.voice.id}/${state.spokenLanguage}';
-    final artist = state.spokenLanguage == null && state.languages.length > 1
-        ? '多语言朗读 · 自动匹配'
-        : state.outputVoice.label;
-    final mediaKey = '$key/$artist';
-    if (_mediaKey != mediaKey && state.novel != null) {
-      _mediaKey = mediaKey;
+        '${state.novel?.id}/${state.chapter}/${state.chapterTitle}/${state.voice.engine}/${state.voice.id}';
+    if (_mediaKey != key && state.novel != null) {
+      _mediaKey = key;
       mediaItem.add(
         MediaItem(
           id: 'wenku:${state.novel!.id}:${state.chapter}',
@@ -248,7 +200,7 @@ class ListeningAudioHandler extends BaseAudioHandler {
               ? '正在准备章节'
               : '第 ${state.chapter + 1} 章 · ${state.chapterTitle}',
           album: state.novel!.title,
-          artist: artist,
+          artist: state.voice.label,
           // Clips are implementation details, not separate tracks. Future
           // speech durations are unknown; do not expose a per-clip seek bar as
           // if it were a chapter duration or republish metadata at every boundary.
@@ -325,9 +277,13 @@ class ListeningAudioHandler extends BaseAudioHandler {
   @override
   Future<void> skipToPrevious() => controller.moveChapter(-1);
   @override
-  Future<void> fastForward() => controller.seekBy(const Duration(seconds: 15));
+  Future<void> fastForward() => controller.seek(
+    controller.progress.value.position + const Duration(seconds: 15),
+  );
   @override
-  Future<void> rewind() => controller.seekBy(const Duration(seconds: -15));
+  Future<void> rewind() => controller.seek(
+    controller.progress.value.position - const Duration(seconds: 15),
+  );
   @override
   Future<void> setSpeed(double speed) => controller.setSpeed(speed);
   @override

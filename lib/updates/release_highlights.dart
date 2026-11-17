@@ -4,13 +4,34 @@ import 'package:flutter/material.dart';
 import '../app_ui.dart';
 import '../app_interactions.dart';
 import 'app_updates.dart';
-import 'release_markdown.dart';
-import 'release_notices.dart';
-import 'current_release_content.dart';
 
-export 'release_notices.dart' show currentReleaseSourcePolicy;
-export 'current_release_content.dart'
-    show ReleaseSection, currentReleaseSummary, currentReleaseSections;
+class ReleaseSection {
+  const ReleaseSection(this.title, this.items);
+  final String title;
+  final List<String> items;
+}
+
+const currentReleaseSourcePolicy =
+    '保留文库在线源、账号管理、云书架和社区；arm64 构建提供文库 API 运行库。';
+
+const currentReleaseSummary = [
+  currentReleaseSourcePolicy,
+  '应用名称为「轻小说文库」。0.4.2 基于完整的 0.4.1 代码，新增阅读书源导入与发现搜索。',
+];
+
+const currentReleaseSections = [
+  ReleaseSection('重要说明', [
+    currentReleaseSourcePolicy,
+    '应用名称保持「轻小说文库」。本版基于完整的 0.4.1 代码，保留账号、文库联网、云书架和社区功能。',
+  ]),
+  ReleaseSection('阅读书源', [
+    '可从 AOAOSTAR 目录、JSON 文件、粘贴内容、直链或 Legado 一键导入链接添加书源。',
+    '启用的书源会参与发现页的书名和作者搜索；支持常见 GET/POST、网页选择器和基础 JSONPath 规则。',
+    '搜索结果显示来源并可打开对应网页；需要 JavaScript、XPath、Cookie 或验证码的规则可能无法执行。',
+    '书源配置保存在本机；现有文库搜索、账号、云书架、社区及本地阅读功能继续保留。',
+    currentReleaseSourcePolicy,
+  ]),
+];
 
 class CurrentReleaseCard extends StatelessWidget {
   const CurrentReleaseCard({super.key, this.updates});
@@ -32,10 +53,10 @@ class CurrentReleaseCard extends StatelessWidget {
           for (final item in currentReleaseSummary)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
-              child: ReleaseNotes(
-                item == currentReleaseSourcePolicy ? '**$item**' : '- $item',
+              child: AppText(
+                '· $item',
                 style: TextStyle(
-                  fontSize: item == currentReleaseSourcePolicy ? 16 : 13,
+                  fontSize: item == currentReleaseSourcePolicy ? 18 : 13,
                   fontWeight: item == currentReleaseSourcePolicy
                       ? FontWeight.w700
                       : FontWeight.normal,
@@ -76,28 +97,27 @@ Future<bool> showInstalledReleaseNotes(
   final appearance = GlassAppearance.of(context);
   final reduced = MediaQuery.disableAnimationsOf(context);
   final completed =
-      await Navigator.of(context, rootNavigator: true).push<bool>(
-        _ReleaseDetailsRoute(
-          barrierDismissible: !automatic,
-          barrierLabel: '关闭更新说明',
-          barrierColor: Colors.black.withValues(alpha: .16),
-          transitionDuration: reduced ? Duration.zero : NovelMotion.enter,
-          transitionBuilder: (context, animation, secondary, child) =>
-              GlassOverlayTransition(
-                animation: animation,
-                kind: GlassOverlayKind.sheet,
-                reduceMotion: reduced,
-                child: child,
-              ),
-          pageBuilder: (context, _, _) => GlassAppearance(
-            blur: appearance.blur,
-            opacity: appearance.opacity,
-            child: PopScope(
-              canPop: !automatic,
-              child: _ReleaseDetails(
-                version: installed?.version ?? currentAppVersion,
-                build: installed?.build ?? currentAppBuild,
-              ),
+      await showGeneralDialog<bool>(
+        context: context,
+        barrierDismissible: !automatic,
+        barrierLabel: '关闭更新说明',
+        barrierColor: Colors.black.withValues(alpha: .16),
+        transitionDuration: reduced ? Duration.zero : NovelMotion.enter,
+        transitionBuilder: (context, animation, secondary, child) =>
+            GlassOverlayTransition(
+              animation: animation,
+              kind: GlassOverlayKind.sheet,
+              reduceMotion: reduced,
+              child: child,
+            ),
+        pageBuilder: (context, _, _) => GlassAppearance(
+          blur: appearance.blur,
+          opacity: appearance.opacity,
+          child: PopScope(
+            canPop: !automatic,
+            child: _ReleaseDetails(
+              version: installed?.version ?? currentAppVersion,
+              build: installed?.build ?? currentAppBuild,
             ),
           ),
         ),
@@ -111,18 +131,6 @@ Future<bool> showInstalledReleaseNotes(
     }
   }
   return completed;
-}
-
-class _ReleaseDetailsRoute extends RawDialogRoute<bool>
-    with AppHapticModalBarrier<bool> {
-  _ReleaseDetailsRoute({
-    required super.pageBuilder,
-    required super.barrierDismissible,
-    required super.barrierLabel,
-    required super.barrierColor,
-    required super.transitionDuration,
-    required super.transitionBuilder,
-  });
 }
 
 class _ReleaseDetails extends StatefulWidget {
@@ -140,7 +148,6 @@ class _ReleaseDetailsState extends State<_ReleaseDetails> {
       .toList(growable: false);
   int _page = 0;
   bool _moving = false;
-  bool _userPaging = false;
   @override
   void dispose() {
     _pages.dispose();
@@ -149,7 +156,6 @@ class _ReleaseDetailsState extends State<_ReleaseDetails> {
 
   Future<void> _move(int page) async {
     if (_moving) return;
-    _userPaging = false;
     if (MediaQuery.disableAnimationsOf(context)) {
       _pages.jumpToPage(page);
     } else {
@@ -243,71 +249,41 @@ class _ReleaseDetailsState extends State<_ReleaseDetails> {
                     ),
                     const SizedBox(height: 18),
                     Expanded(
-                      child: NotificationListener<ScrollNotification>(
-                        onNotification: (notification) {
-                          if (notification.depth != 0) return false;
-                          if (notification is ScrollStartNotification) {
-                            _userPaging = notification.dragDetails != null;
-                          } else if (notification is ScrollEndNotification) {
-                            _userPaging = false;
-                          }
-                          return false;
-                        },
-                        child: PageView.builder(
-                          key: const ValueKey('release-details-pages'),
-                          controller: _pages,
-                          itemCount: _sections.length,
-                          onPageChanged: (page) {
-                            if (_userPaging && page != _page) {
-                              AppHaptics.play(context, HapticCue.pageTurn);
-                            }
-                            setState(() => _page = page);
-                          },
-                          itemBuilder: (context, index) =>
-                              SingleChildScrollView(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    AppText(
-                                      _sections[index].title,
-                                      key: ValueKey('release-section-$index'),
-                                      style: const TextStyle(
-                                        fontSize: 19,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 14),
-                                    for (final item in _sections[index].items)
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                          bottom: 16,
-                                        ),
-                                        child: ReleaseNotes(
-                                          item == currentReleaseSourcePolicy
-                                              ? '> **$item**'
-                                              : index == 0
-                                              ? item
-                                              : '- $item',
-                                          style: TextStyle(
-                                            fontSize:
-                                                item ==
-                                                    currentReleaseSourcePolicy
-                                                ? 16
-                                                : 14,
-                                            fontWeight:
-                                                item ==
-                                                    currentReleaseSourcePolicy
-                                                ? FontWeight.w700
-                                                : FontWeight.normal,
-                                            height: 1.75,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
+                      child: PageView.builder(
+                        key: const ValueKey('release-details-pages'),
+                        controller: _pages,
+                        itemCount: _sections.length,
+                        onPageChanged: (page) => setState(() => _page = page),
+                        itemBuilder: (context, index) => SingleChildScrollView(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              AppText(
+                                _sections[index].title,
+                                key: ValueKey('release-section-$index'),
+                                style: const TextStyle(
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
+                              const SizedBox(height: 14),
+                              for (final item in _sections[index].items)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 16),
+                                  child: AppText(
+                                    '· $item',
+                                    style: TextStyle(
+                                      fontSize: index == 0 ? 18 : 14,
+                                      fontWeight: index == 0
+                                          ? FontWeight.w700
+                                          : FontWeight.normal,
+                                      height: 1.75,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

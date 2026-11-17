@@ -6,7 +6,6 @@ import 'app_ui.dart';
 import 'catalog.dart';
 import 'feature_pages.dart';
 import 'local_image_layout.dart';
-import 'reader_appearance.dart';
 import 'reader_content.dart';
 import 'reader_illustrations.dart';
 
@@ -37,7 +36,6 @@ class _ReaderVolumeIllustrationsPageState
   final _imagesByChapter = <int, List<String>>{};
   final _failed = <int>{};
   bool _loading = false;
-  bool _hasLoaded = false;
 
   // Small EPUB annotation glyphs are not full-page illustrations.
   List<String> _images(ReaderContent content) {
@@ -123,26 +121,17 @@ class _ReaderVolumeIllustrationsPageState
     }
 
     await Future.wait(List.generate(pending.length.clamp(0, 2), (_) => next()));
-    if (mounted) {
-      setState(() {
-        _loading = false;
-        _hasLoaded = true;
-      });
-    }
+    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _open(String url) => pushNovelPage<void>(
     context,
-    ReaderAppearance.inherit(
-      context,
-      child: ReaderIllustrationGallery(
-        urls: _urls,
-        initialUrl: url,
-        title: '本卷插图',
-        fileNamePrefix: widget.novel.title,
-      ),
+    ReaderIllustrationGallery(
+      urls: _urls,
+      initialUrl: url,
+      title: '本卷插图',
+      fileNamePrefix: widget.novel.title,
     ),
-    slot: ReaderIllustrationGallery,
     reduceMotion: widget.reduceMotion,
   );
 
@@ -208,9 +197,7 @@ class _ReaderVolumeIllustrationsPageState
                 mainAxisSpacing: 16,
                 crossAxisSpacing: 16,
               ),
-              itemCount: images.isEmpty && _loading && !_hasLoaded
-                  ? 4
-                  : images.length,
+              itemCount: images.isEmpty && _loading ? 4 : images.length,
               itemBuilder: (context, index) => images.isEmpty
                   ? const LoadingSkeleton(layout: SkeletonLayout.cover)
                   : ContentPanel(
